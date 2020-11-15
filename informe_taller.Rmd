@@ -1,0 +1,182 @@
+---
+title: "Informe preliminar"
+author: "Valentina Caldiroli, Maximiliano Saldaña"
+date: "16/4/2020"
+output:
+  pdf_document:
+    toc: no
+    pandoc_args: [
+      "--number-sections",
+      "--number-offset=1"
+    ]
+header-includes:
+  - \usepackage{float}
+  - \usepackage[spanish]{babel}
+
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo=FALSE,
+                      warning = FALSE,
+                      results = FALSE,
+                      message = FALSE,
+                      fig.pos = 'H',
+                      fig.align = 'center',
+                      out.extra = '',
+                      fig.hold = 'hold',
+                      out.width = "50%"
+                      )
+options(xtable.comment=FALSE,
+        xtable.table.placement="H")
+```
+
+
+```{r, include = FALSE}
+library(tidyverse)
+library(janitor)
+library(xtable)
+library(gridExtra)
+library(scales)
+library(regclass)
+```
+
+\title{Modelización lineal del salario}
+\author{Valentina Caldiroli, Maximiliano Saldaña}
+\date{Noviembre 2020}
+
+
+
+\maketitle
+
+
+
+\newpage
+
+\tableofcontents
+
+\newpage
+
+
+
+
+
+
+
+
+# Resumen ejecutivo
+
+
+
+
+# Presentación del problema
+
+El objetivo de este proyecto es estimar un modelo logístico mediante un método de máxima verosimilitud que aplique los métodos de optimización del curso y comparar el desempeño de nuestra estimación con el de las funciones base de R. Se hará uso de una base de salarios de Estados Unidos del año 1976, extraída del libro _Introducción a la Econometría, Un enfoque moderno (2009)_ de J.M. Wooldridge. La variable a ser explicada es una indicadora que vale 1 cuando el salario de la persona es mayor o igual del promedio y 0 cuando es menor. Las variables explicativas serán el sexo de la persona, su educación, experiencia, antigüedad, región (dividida en Norte, Sur, Este y Oeste), si vive en una región metropolitana, rama de actividad (dividida en Construcción, Comercio,
+Servicios y Otros) y Ocupación (dividida en Profesional, Administrativos, Servicios y Otros).
+
+El modelo en cuestión es de la forma siguiente _(Nalbarte, 2020)_:
+
+$$P(Y_i = 1) = \frac{exp(x'_i\beta)}{1+exp(x'_i\beta)} = \pi_i = E(y_i)$$
+
+Donde $x'_i\beta = \beta_0 + \beta_1 x_{i1} + \dots + \beta_1 x_{ip} $ (siendo $p$ el número de variables explicativas)
+
+La función de unión (la que vincula $E(y_i)$ con $x'_i$) es:
+
+$$log_e \left[\frac{\pi_i}{1-\pi_i}\right] = exp(x'_i\beta) $$
+
+El problema de estimar el vector de parámetros $\beta$ se traduce en un problema de optimización, ya que buscamos que dicho vector sea el que maximice la función de verosimilitud de $Y$. Como $Y_i$ son variables aleatorias Bernoulli independientes e idénticamente distribuidas $\forall \,\, i=1,\dots,n$ la función de verosimilitud es:
+
+$$L(\pi_1, \dots, \pi_n  | Y_1, \dots, Y_n) = \prod_{i=1}^n f_{Y_i}(y_i) = \prod_{i=1}^n \pi_i^{y_i}(1- \pi_i^{y_i})^{1-y_i}$$
+Resulta equivalente trabajar con el logaritmo de la verosimilitud, que es:
+
+$$log \,L(\pi_1, \dots, \pi_n  | Y_1, \dots, Y_n) = log \, \prod_{i=1}^n \pi_i^{y_i}(1- \pi_i^{y_i})^{1-y_i} = \sum_{i=1}^n \left[ Y_i log \left( \frac{\pi}{1+\pi} \right) \right] + \sum_{i=1}^n log(1-\pi_i)$$
+
+Teniendo en cuenta que:
+
+$$1-\pi_i = [1+exp(x'_i\beta)]^{-1}$$
+$$\frac{\pi}{1+\pi} = exp(x'_i\beta)$$
+
+$$log \, L(\beta|Y) = \sum_{i=1}^n  Y_i (x'_i\beta)   - \sum_{i=1}^n log(1+ exp(x'_i\beta)) $$
+
+Estimaremos el vector $\beta$ que maximice la función anterior.
+
+
+# Metodología usada
+
+
+
+# Datos utilizados (Aplicación)
+
+```{r, results='hide'}
+#Arreglo inicial de los datos
+
+datos <- read_delim("wage1.txt", delim = "\t") %>% 
+  as.data.frame %>% 
+  clean_names() %>%
+  rename(salario = "wage", reg.metro = "smsa", log.salario= "lwage")
+
+as.numeric(sapply(datos, is.numeric))
+
+names(subset(datos, select=!as.numeric(sapply(datos, is.numeric))))
+
+sapply(subset(datos, select=!as.numeric(sapply(datos, is.numeric))), class)
+
+head(subset(datos, select=!as.numeric(sapply(datos, is.numeric))))
+
+datos <- datos %>%
+  mutate(salario = gsub(",", ".", salario), log.salario = gsub(",", ".", log.salario) ) %>% 
+  mutate_at(c("salario", "log.salario"), as.numeric)
+
+
+
+
+
+
+#datos con variables indicadoras categoricas y hacemos categorica la variable salario (usamos las categorias menor a 15 y mayor a 15 dolares por hora)
+datos <- datos %>% 
+  mutate(
+    region = as.factor(case_when(
+               northcen == 1 ~ "northcen",
+               south == 1 ~ "south",
+               west == 1 ~ "west",
+               northcen + south + west == 0 ~ "east"
+               )),
+    rama_act = as.factor(case_when(
+                 construc == 1 ~ "construc",
+                 trade == 1 ~ "trade",
+                 services == 1 ~ "services",
+                 construc + trade + services == 0 ~ "otros"
+               )),
+    ocupacion = as.factor(case_when(
+                 profocc == 1 ~ "profocc",
+                 clerocc == 1 ~ "clerocc",
+                 servocc == 1 ~ "servocc",
+                 profocc + clerocc + servocc == 0 ~ "otros",
+    )),
+    sal_min = ifelse(salario >= 5.896103 , 1, 0),
+          
+    educsq = educ^2
+  ) %>% 
+  dplyr::select(-profserv)
+
+
+
+
+
+
+```
+
+
+
+
+
+# Resultados (presentación y discusión)
+
+# Conclusiones y futuros pasos
+
+
+#Bibliografía
+
+
+
+
+
