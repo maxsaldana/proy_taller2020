@@ -35,9 +35,7 @@ options(xtable.comment=FALSE,
 library(tidyverse)
 library(janitor)
 library(xtable)
-library(gridExtra)
-library(scales)
-library(regclass)
+library(mfx)
 ```
 
 \title{Modelización lineal del salario}
@@ -70,14 +68,15 @@ library(regclass)
 
 # Presentación del problema
 
-El objetivo de este proyecto es estimar un modelo logístico mediante un método de máxima verosimilitud que aplique los métodos de optimización del curso y comparar el desempeño de nuestra estimación con el de las funciones base de R. Se hará uso de una base de salarios de Estados Unidos del año 1976, extraída del libro _Introducción a la Econometría, Un enfoque moderno (2009)_ de J.M. Wooldridge. La variable a ser explicada es una indicadora que vale 1 cuando el salario de la persona es mayor o igual del promedio y 0 cuando es menor. Las variables explicativas serán el sexo de la persona, su educación, experiencia, antigüedad, región (dividida en Norte, Sur, Este y Oeste), si vive en una región metropolitana, rama de actividad (dividida en Construcción, Comercio,
-Servicios y Otros) y Ocupación (dividida en Profesional, Administrativos, Servicios y Otros).
+El objetivo de este proyecto es estimar un modelo logístico mediante un método de máxima verosimilitud que aplique los métodos de optimización del curso y comparar el desempeño de nuestra estimación con el de las funciones base de R. Se hará uso de una base de salarios de Estados Unidos del año 1976, extraída del libro _Introducción a la Econometría, Un enfoque moderno (2009)_ de J.M. Wooldridge. La variable a ser explicada es una indicadora que vale 1 cuando el salario de la persona es mayor o igual del promedio y 0 cuando es menor. Las variables explicativas (que se eligieron en base a lo ya trabajado en el curso Modelos Lineales) serán el sexo de la persona, su educación, experiencia, antigüedad, región (dividida en Norte, Sur, Este y Oeste), si vive en una región metropolitana, rama de actividad (dividida en Construcción, Comercio, Servicios y Otros) y Ocupación (dividida en Profesional, Administrativos, Servicios y Otros).
 
 El modelo en cuestión es de la forma siguiente _(Nalbarte, 2020)_:
 
+<!-- Plantearlo asi en generico o particular? -->
+
 $$P(Y_i = 1) = \frac{exp(x'_i\beta)}{1+exp(x'_i\beta)} = \pi_i = E(y_i)$$
 
-Donde $x'_i\beta = \beta_0 + \beta_1 x_{i1} + \dots + \beta_1 x_{ip} $ (siendo $p$ el número de variables explicativas)
+Donde $x'_i\beta = \beta_0 + \beta_1 x_{i1} + \dots + \beta_1 x_{ip}$ (siendo $p$ el número de variables explicativas)
 
 La función de unión (la que vincula $E(y_i)$ con $x'_i$) es:
 
@@ -106,7 +105,7 @@ Estimaremos el vector $\beta$ que maximice la función anterior.
 
 # Datos utilizados (Aplicación)
 
-```{r, results='hide'}
+```{r, results='hide', echo = FALSE}
 #Arreglo inicial de los datos
 
 datos <- read_delim("wage1.txt", delim = "\t") %>% 
@@ -152,7 +151,7 @@ datos <- datos %>%
                  servocc == 1 ~ "servocc",
                  profocc + clerocc + servocc == 0 ~ "otros",
     )),
-    sal_min = ifelse(salario >= 5.896103 , 1, 0),
+    sal_med = ifelse(salario >= 5.896103 , 1, 0),
           
     educsq = educ^2
   ) %>% 
@@ -165,9 +164,52 @@ datos <- datos %>%
 
 ```
 
+## Estimando mediante las funciones base
+
+Inicialmente para tener como referencia y para comparar, estimaremos el modelo mediante la función de R _glm_.
+
+```{r, echo = FALSE}
+#modelo logit
+
+modelo_ctrl <- glm(sal_med ~ female + educ + exper + tenure + northcen + south + west + reg.metro + construc + services + trade + profocc + clerocc + servocc, family = binomial (link = "logit") ,data = datos)
 
 
+summary(modelo_ctrl)
+```
 
+Se puede observar que no todas las variables del conjunto resultan estadísticamente significativas.
+
+```{r, echo=FALSE}
+#comentar esto o eliminarlo?
+mfx::logitor(sal_med ~ female + educ + exper + tenure + northcen + south + west + reg.metro + construc + services + trade + profocc + clerocc + servocc, data = datos)
+```
+
+## Estimación mediante los métodos vistos en clase
+
+Retomando el planteo de nuestro problema, debemos buscar el máximo de nuestra función de verosimilitud, es decir:
+
+$$	\max_\beta \,\, log \, L(\beta|Y) = \max_\beta \,\, \left[\sum_{i=1}^n  Y_i (x'_i\beta)   - \sum_{i=1}^n log(1+ exp(x'_i\beta))\right] $$
+
+```{r}
+#funcion a maximizar
+
+X <- dplyr::select(datos,female, educ, exper, tenure, northcen, south, west, reg.metro, construc, services, trade, profocc, clerocc, servocc)
+
+X <- cbind(rep(1, dim(X)[1]), X)
+
+attach(X)
+log_ver <- function(b){
+  #b tiene que ser un vector k+1 = 14 + 1 dimensional
+  
+  lv <- sum((datos$sal_med)*(as.matrix(X)%*%b)) - sum(log(1-exp(as.matrix(X)%*%b))) 
+  return(lv)
+}
+
+btest = rep(0.5,15)
+```
+
+
+### Ascenso más rápido
 
 # Resultados (presentación y discusión)
 
