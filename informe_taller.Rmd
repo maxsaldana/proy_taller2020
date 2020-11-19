@@ -105,7 +105,7 @@ Para lograr optimizar la función de verosimilitud, se emplearán tres métodos 
 el curso, denominados: Ascenso más rápido, Método de Newton, y Método de quasi-Newton, o también conocido como BFGS.
 El caso del primer método es utilizado en funciones contínuas con derivadas parciales de primer y segundo orden; su implementación se da a partir de una recursión dada por:
 $$X_n+1 = X_n + \alpha_np_n  $$
-De donde se denota que \alpha_n es la longitud de paso con la que se realizará la búsqueda, y pn es la dirección de búsqueda, determinada por el vector gradiente, de modo que cuando la norma del gradiente es mayor a 0 la función asciende, y una vez que la norma es igual a 0 ese ascenso se detiene.
+De donde se denota que $\alpha_n$ es la longitud de paso con la que se realizará la búsqueda, y $p_n$ es la dirección de búsqueda, determinada por el vector gradiente, de modo que cuando la norma del gradiente es mayor a 0 la función asciende, y una vez que la norma es igual a 0 ese ascenso se detiene.
 
 # Datos utilizados (Aplicación)
 
