@@ -194,14 +194,13 @@ Retomando el planteo de nuestro problema, debemos buscar el máximo de nuestra f
 
 $$	\max_\beta \,\, log \, L(\beta|Y) = \max_\beta \,\, \left[\sum_{i=1}^n  Y_i (x'_i\beta)   - \sum_{i=1}^n log(1+ exp(x'_i\beta))\right] $$
 
-```{r}
+```{r, echo = FALSE}
 #funcion a maximizar
 
 X <- dplyr::select(datos,female, educ, exper, tenure, northcen, south, west, reg.metro, construc, services, trade, profocc, clerocc, servocc)
 
 X <- cbind(rep(1, dim(X)[1]), X)
 
-attach(X)
 log_ver <- function(b){
   #b tiene que ser un vector k+1 = 14 + 1 dimensional
   
@@ -212,8 +211,124 @@ log_ver <- function(b){
 btest = rep(0.5,15)
 ```
 
+Para emplear los métodos numéricos de optimización antes mencionados haremos uso de las funciones para aplicarlos vistas en el curso, las que fue necesario modificar para que fuera posible emplear aproximaciones numéricas del gradiente y la hessiana de la log-verosimilitud. 
 
 ### Ascenso más rápido
+
+```{r, echo = FALSE}
+##EXTRAIDO DE LO DE CLASE###
+
+#para calcular numericamente el gradiente 
+gradiente <- function(FUN, x0){
+  
+  f0 <- FUN(x0)
+  h <- sqrt(.Machine$double.eps)
+  k <- length(x0)
+  dfx <- rep(0, k)
+  
+  for(i in 1:k){
+    xi <- x0
+    xi[i] <- xi[i] + h
+    dfx[i] <- (FUN(xi)-f0)/h
+  }
+  
+  return(dfx)
+}
+
+#hessiana
+hessiana <- function(FUN, x0){
+  
+  f0 <- FUN(x0)
+  h <- (.Machine$double.eps)^(1/3)
+  k <- length(x0)
+  Hfx <- matrix(0,k,k)
+  
+  for(i in 1:k){
+    for(j in 1:k){
+    xi <- x0
+    xj <- x0
+    xij <- x0
+      
+    xi[i] <- xi[i] + h
+    xj[j] <- xj[j] + h
+    
+    xij[i] <- xij[i] + h
+    xij[j] <- xij[j] + h
+
+    Hfx[i,j] <- (FUN(xij)-FUN(xi)-FUN(xj)+f0)/(h^2)
+    }
+  }
+  
+  return(Hfx)
+}
+
+
+
+
+#busqueda lineal
+
+blineal<-function(FUN,xn,pn,a_max=1,tau=0.5,maxiter_bt=10,c1=1e-4,c2=0.9,tau2=0.8,mostrar_bl=TRUE){
+	phi<-function(x,a,p) FUN(x+a*p)
+	phi0<-phi(xn,0,pn)
+	alfa<-a_max
+	phia<-phi(xn,alfa,pn)
+
+	# condicion de ascenso suficiente
+	iter_bt<-1
+	armijo<-phi0+c1*alfa*sum(pn^2)
+	while(phia<=armijo & iter_bt<maxiter_bt){
+		alfa<-alfa*tau
+		armijo<-phi0+alfa*c1*sum(pn^2)
+		phia<-phi(xn,alfa,pn)
+		iter_bt<-iter_bt+1
+	}
+	
+  #condicion de curvatura
+	iter_ft<-0
+	while(sum(gradiente(FUN, xn+alfa*pn)*pn) > c2*sum(pn^2)){
+		if(iter_ft==0 & mostrar_bl==TRUE) cat('Realizando forward-tracking','\n')
+		iter_ft<-iter_ft+1
+		alfa_old<-alfa/tau
+		dif<-alfa_old - alfa
+		alfa<-alfa + dif*(1-tau^iter_ft)
+	}
+
+	if(iter_bt==maxiter_bt & mostrar_bl==TRUE) cat('Fallo la busqueda lineal','\n')
+	salida<-list(alfa=alfa,iter_bt=iter_bt,iter_ft=iter_ft)
+	return(salida)
+}
+
+
+
+
+#metodo ascenso suficiente
+
+ascenso <- function(FUN,x0,tol=1e-5,maxiter=1000,mostrar=TRUE,a_max=1,tau=0.5,maxiter_bt=10,c1=1e-4,c2=0.9,tau2=0.8,trace_bl=mostrar){
+	pn <- gradiente(FUN, x0)
+	alfa<-blineal(FUN,x0,pn,a_max=a_max,tau=tau,maxiter_bt=maxiter_bt,c1=c1,c2=c2,tau2=tau2,mostrar_bl=trace_bl)
+	an<-alfa$alfa
+	x1<-x0+an*pn
+	iter<-1
+	cambio<-sum(pn^2)
+
+	while(cambio>tol & iter<maxiter){
+		x0<-x1
+		pn<-gradiente(FUN, x0)
+		alfa<-blineal(FUN,x0,pn,a_max=a_max,tau=tau,maxiter_bt=maxiter_bt,c1=c1,c2=c2,tau2=tau2,mostrar_bl=trace_bl)
+		an<-alfa$alfa
+		x1<-x0+an*pn
+		if(mostrar==TRUE) cat(paste('x',iter,sep=''),x1,'\n')
+		iter<-iter+1
+		cambio<-sum(pn^2)
+	}
+	if(iter==maxiter & mostrar==TRUE) cat('No se alcanzo convergencia','\n')
+
+	salida<-list(x_max=x1,fx_max=FUN(x1),iter=iter)
+	return(salida)
+}
+```
+
+
 
 # Resultados (presentación y discusión)
 
