@@ -120,6 +120,14 @@ Para que se cumpla que sea una función creciente, entonces  $∇f(x_n)^T Hf(x_n
 $$x_{n+1} = x_n −\alpha _nH^{−1}_{f(x_n)}∇f(x_n)$$
 Para la correcta utilización de este método se debe buscar un $x_0$ próximo al máximo que buscamos para que converja a él, o por lo menos si saber que le hessiana es definida negativa. 
 
+Los métodos de Quasi-Newton, solo necesitan de la función a maximizar y de su gradiente, que mediante las iteraciones va aproximando la Hessiana, por lo que alcanza un orden de convergencia superlineal, aunque puede llegar a ser mas veloz que el método de Newton por no tener que evaluar la Hessiana. Estos métodos son de la forma:
+$$ x_{n+1} = x_n + \alpha_nB^{−1}_n∇f(x_n)$$
+De donde $B_n$ es la aproximación de la Hessiana, dada por $B_{n+1}(x_{n+1} −x_n) = ∇f (x_{n+1})−∇f (x_n) $, que haciendo unos cambios de variables obtenes la ecuación de una recta secante $B_{n+1}s_n = y_n$, siendo $s_n = x_{n+1} −x_n$ y $y_n = ∇f (x_{n+1})−∇f (x_n)$. Para la aproximación de esa Hessiana existe varios métodos, uno es el de Davidon-Fletcher-Powell (DFP), y se plantea así: 
+$$ H_{n+1} = H_n − \frac{\ H_ny_ny ^T_nH_n}{y^T_n H_ny_n} + \frac{\ s_ns^T_n}{y^T_ns_n} $$
+Un segundo método, surge de imponer la ecuación secante a la inversa de $B_n$, método planteado por Broyden-Fletcher-Goldfarg-Shanno,  y denominado BFGS. Esta recursión está dada por:
+$$ H_{n+1} = (I − \frac {\ 1}{y^T_ns_n}s_ny^T_n) H_n (I − \frac {\ 1}{y^T_ns_n}y_ns^T_n) + \frac {\ s_ns^T_n}{y^T_ns_n}$$
+
+
 # Datos utilizados (Aplicación)
 
 ```{r, results='hide', echo = FALSE}
