@@ -26,13 +26,15 @@ knitr::opts_chunk$set(echo=FALSE,
                       fig.hold = 'hold',
                       out.width = "50%"
                       )
+
 options(xtable.comment=FALSE,
         xtable.table.placement="H")
 ```
 
 
 ```{r, include = FALSE}
-library(tidyverse)
+library(dplyr)
+library(readr)
 library(janitor)
 library(xtable)
 library(mfx)
@@ -104,28 +106,28 @@ Estimaremos el vector $\beta$ que maximice la función anterior.
 Para lograr optimizar la función de verosimilitud, se emplearán tres métodos estudiados en 
 el curso, denominados: Ascenso más rápido, Método de Newton, y Método de quasi-Newton, o también conocido como BFGS.
 El caso del primer método es utilizado en funciones contínuas con derivadas parciales de primer y segundo orden; su implementación se da a partir de una recursión dada por:
-$$X_{n+1} = X_n + \alpha_np_n  $$
-De donde se denota que $\alpha_n$ es la longitud de paso con la que se realizará la búsqueda, y $p_n$ es la dirección de búsqueda, determinada por $∇ f(x)$ (vector de los gradientes), de modo que cuando la $||∇ f(x)|| > 0$ la función asciende, y una vez que $||∇ f(x)|| = 0$ ese ascenso se detiene. Una vez definida la dirección del paso, se procese a la elección de la longitud, mediante:
-$$ \alpha_n = max_ \alpha  \phi(\alpha) = max_\alpha f(x_n + \alpha ∇f(x_n))) $$
+$$X_{n+1} = X_n + \alpha_n p_n$$
+De donde se denota que $\alpha_n$ es la longitud de paso con la que se realizará la búsqueda, y $p_n$ es la dirección de búsqueda, determinada por $\nabla f(x)$ (vector de los gradientes), de modo que cuando la $|| \nabla f(x)|| > 0$ la función asciende, y una vez que $||\nabla f(x)|| = 0$ ese ascenso se detiene. Una vez definida la dirección del paso, se procese a la elección de la longitud, mediante:
+$$\alpha_n = max_\alpha  \phi(\alpha) = max_\alpha f(x_n + \alpha f(x_n))$$
 Para una elección correcta del $\alpha$ además es necesario aplicar las condiciones de Wolfe, son dos y se denominan Condición de ascenso más rápido:
-$$ f(x_n +\alpha p_n) ≥ f(x_n) +c_1 \alpha ∇f (x_n)^T p_n $$
+$$f(x_n +\alpha p_n) \ge f(x_n) +c_1 \alpha \nabla f (x_n)^T p_n$$
 Y la segunda es la condición de curvatura:
-$$ ∇f(x_n +\alpha_np_n)^T p_n ≤ c_2∇f(x_n)^T p_n $$
-La primer condición impone que los valores aceptables de $\alpha$ son aquellos donde $f(x_{n+1})$ está por encima de la recta con pendiente $c_1∇f(x_n)^Tp_n$. La segunda  impone que el gradiente de $f (x_n +\alpha _np_n)$ no sea demasiado “empinado” con respecto al gradiente de $f(x_n)$. 
+$$\nabla f(x_n +\alpha_np_n)^T p_n \le c_2 \nabla f(x_n)^T p_n$$
+La primer condición impone que los valores aceptables de $\alpha$ son aquellos donde $f(x_{n+1})$ está por encima de la recta con pendiente $c_1 \nabla f(x_n)^T p_n$. La segunda  impone que el gradiente de $f(x_n +\alpha_n p_n)$ no sea demasiado “empinado” con respecto al gradiente de $f(x_n)$. 
 Una manera de encontrar un posible valor de $\alpha$ es mediante el algoritmo de backtracking. Este algoritmo comienza con un valor inicial $\alpha_{max}$ y lo contrae iterativamente hasta que se cumplen las condiciones de Wolfe.
 
 El método de Newton por su parte, agiliza la búsqueda del máximo mediante la implementación de la Hessiana, utilizando un polinomio de Taylor de segundo orden llegamos a:
-$$  f(x_{n+1}) ≈ f(x_n)−∇f(x_n)^THf(x_n)∇f(x_n)$$
-Para que se cumpla que sea una función creciente, entonces  $∇f(x_n)^T Hf(x_n)∇f(x_n) ≤ 0$, y esto solo sucede cuando $H_{f(x_n)}$ es definida negativa. Por lo que la recursión de Newton está definida de la siguiente manera:
-$$x_{n+1} = x_n −\alpha _nH^{−1}_{f(x_n)}∇f(x_n)$$
+$$f(x_{n+1}) \approx f(x_n) - \nabla f(x_n)^T Hf(x_n) \nabla f(x_n)$$
+Para que se cumpla que sea una función creciente, entonces  $\nabla f(x_n)^T Hf(x_n) \nabla f(x_n) \le 0$, y esto solo sucede cuando $H_{f(x_n)}$ es definida negativa. Por lo que la recursión de Newton está definida de la siguiente manera:
+$$x_{n+1} = x_n - \alpha_n H^{-1}_{f(x_n)} \nabla f(x_n)$$
 Para la correcta utilización de este método se debe buscar un $x_0$ próximo al máximo que buscamos para que converja a él, o por lo menos si saber que le hessiana es definida negativa. 
 
 Los métodos de Quasi-Newton, solo necesitan de la función a maximizar y de su gradiente, que mediante las iteraciones va aproximando la Hessiana, por lo que alcanza un orden de convergencia superlineal, aunque puede llegar a ser mas veloz que el método de Newton por no tener que evaluar la Hessiana. Estos métodos son de la forma:
-$$ x_{n+1} = x_n + \alpha_nB^{−1}_n∇f(x_n)$$
-De donde $B_n$ es la aproximación de la Hessiana, dada por $B_{n+1}(x_{n+1} −x_n) = ∇f (x_{n+1})−∇f (x_n) $, que haciendo unos cambios de variables obtenes la ecuación de una recta secante $B_{n+1}s_n = y_n$, siendo $s_n = x_{n+1} −x_n$ y $y_n = ∇f (x_{n+1})−∇f (x_n)$. Para la aproximación de esa Hessiana existe varios métodos, uno es el de Davidon-Fletcher-Powell (DFP), y se plantea así: 
-$$ H_{n+1} = H_n − \frac{\ H_ny_ny ^T_nH_n}{y^T_n H_ny_n} + \frac{\ s_ns^T_n}{y^T_ns_n} $$
+$$ {n+1} = x_n + \alpha_n B^{-1}_n \nabla f(x_n)$$
+De donde $B_n$ es la aproximación de la Hessiana, dada por $B_{n+1}(x_{n+1} -x_n) = \nabla f(x_{n+1}) - \nabla f(x_n)$, que haciendo unos cambios de variables obtenes la ecuación de una recta secante $B_{n+1}s_n = y_n$, siendo $s_n = x_{n+1} - x_n$ y $y_n = \nabla f(x_{n+1}) -\nabla f(x_n)$. Para la aproximación de esa Hessiana existe varios métodos, uno es el de Davidon-Fletcher-Powell (DFP), y se plantea así: 
+$$H_{n+1} = H_n - \frac{H_n y_n y^T_n H_n}{y^T_n H_ny_n} + \frac{ s_ns^T_n}{y^T_ns_n}$$
 Un segundo método, surge de imponer la ecuación secante a la inversa de $B_n$, método planteado por Broyden-Fletcher-Goldfarg-Shanno,  y denominado BFGS. Esta recursión está dada por:
-$$ H_{n+1} = (I − \frac {\ 1}{y^T_ns_n}s_ny^T_n) H_n (I − \frac {\ 1}{y^T_ns_n}y_ns^T_n) + \frac {\ s_ns^T_n}{y^T_ns_n}$$
+$$H_{n+1} = (I  - \frac{1}{y^T_ns_n}s_ny^T_n) H_n (I - \frac{ 1}{y^T_ns_n}y_ns^T_n) + \frac{s_ns^T_n}{y^T_ns_n}$$
 
 
 # Datos utilizados (Aplicación)
