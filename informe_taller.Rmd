@@ -228,6 +228,7 @@ log_ver <- function(b){
   #b tiene que ser un vector k+1 = 14 + 1 dimensional
   
   lv <- sum((datos$sal_med)*(as.matrix(X)%*%b)) - sum(log(1-exp(as.matrix(X)%*%b))) 
+  
   return(lv)
 }
 
@@ -322,9 +323,12 @@ blineal<-function(FUN,xn,pn,a_max=1,tau=0.5,maxiter_bt=10,c1=1e-4,c2=0.9,tau2=0.
 }
 
 
+```
 
 
-#metodo ascenso suficiente
+
+```{r, echo = FALSE}
+#metodo ascenso mas rapido
 
 ascenso <- function(FUN,x0,tol=1e-5,maxiter=1000,mostrar=TRUE,a_max=1,tau=0.5,maxiter_bt=10,c1=1e-4,c2=0.9,tau2=0.8,trace_bl=mostrar){
 	pn <- gradiente(FUN, x0)
@@ -351,6 +355,89 @@ ascenso <- function(FUN,x0,tol=1e-5,maxiter=1000,mostrar=TRUE,a_max=1,tau=0.5,ma
 }
 ```
 
+
+### Método de Newton 
+
+```{r, echo = FALSE}
+#metodo de newton
+
+
+
+newton<-function(FUN, x0,tol=1e-5,maxiter=1000,mostrar=TRUE,a_max=1,tau=0.5,maxiter_bt=10,c1=1e-4,c2=0.9,tau2=0.8,trace_bl=mostrar){
+	pn <- -solve(hessiana(FUN, x0))%*%gradiente(FUN, x0)
+	alfa<-blineal(FUN, x0,pn,a_max=a_max,tau=tau,maxiter_bt=maxiter_bt,c1=c1,c2=c2,tau2=tau2,mostrar_bl=trace_bl)
+	an<-alfa$alfa
+	x1<-x0+an*pn
+	iter<-1
+	cambio<-sum(pn^2)
+
+	while(cambio>tol & iter<maxiter){
+		x0<-x1
+		pn<- -solve(hessiana(FUN, x0))%*%gradiente(FUN, x0)
+		alfa<-blineal(FUN,x0,pn,a_max=a_max,tau=tau,maxiter_bt=maxiter_bt,c1=c1,c2=c2,tau2=tau2,mostrar_bl=trace_bl)
+		an<-alfa$alfa
+		x1<-x0+an*pn
+		if(mostrar==TRUE) cat(paste('x',iter,sep=''),x1,'\n')
+		iter<-iter+1
+		cambio<-sum(pn^2)
+	}
+	if(iter==maxiter & mostrar==TRUE) cat('No se alcanzo convergencia','\n')
+
+	salida<-list(x_max=x1,fx_max=FUN(x1),iter=iter)
+	return(salida)
+}
+
+
+chequeo<-function(M){
+	lam<-eigen(M)$values
+	if(all(lam>0)) cat('M es definida positiva','\n')
+	if(all(lam<0)) cat('M es definida negativa','\n')
+	if(any(lam>0) & any(lam<0)) cat('M es indefinida','\n')
+	return(lam)
+}
+```
+
+
+
+### Método de Broyden-Fletcher-Goldfarg-Shanno
+
+```{r, echo = FALSE}
+#metodo bfgs
+
+bfgs<-function(FUN,x0,tol=1e-5,maxiter=1000,mostrar=TRUE,a_max=1,tau=0.5,maxiter_bt=10,c1=1e-4,c2=0.9,tau2=0.8,trace_bl=mostrar){
+	H<- -diag(length(x0))
+	pn <- df0 <- -H%*%gradiente(FUN,x0)
+	alfa<-blineal(FUN,dFUN,x0,pn,a_max=a_max,tau=tau,maxiter_bt=maxiter_bt,c1=c1,c2=c2,tau2=tau2,mostrar_bl=trace_bl)
+	an<-alfa$alfa
+	x1<-x0+an*pn
+	df1<-gradiente(FUN, x1)
+	iter<-1
+	cambio<-sum(pn^2)
+	Id<--H
+
+	while(cambio>tol & iter<maxiter){
+		sn<-x1-x0
+		yn<-df1-df0
+		rn<-1/sum(yn*sn)
+		H<-(Id-rn*sn%*%t(yn))%*%H%*%(Id-rn*yn%*%t(sn))+rn*sn%*%t(sn)
+		x0<-x1
+		df0<-df1
+		pn<--H%*%df1
+		alfa<-blineal(FUN, pn,a_max=a_max,tau=tau,maxiter_bt=maxiter_bt,c1=c1,c2=c2,tau2=tau2,mostrar_bl=trace_bl)
+		an<-alfa$alfa
+		x1<-x0+an*pn
+		df1 <- gradiente(FUN,x1)
+		if(mostrar==TRUE) cat(paste('x',iter,sep=''),x1,'\n')
+		iter<-iter+1
+		cambio<-sum(pn^2)
+	}
+	if(iter==maxiter & mostrar==TRUE) cat('No se alcanzo convergencia','\n')
+
+	salida<-list(x_max=x1,fx_max=FUN(x1),iter=iter)
+	return(salida)
+}
+
+```
 
 
 # Resultados (presentación y discusión)
