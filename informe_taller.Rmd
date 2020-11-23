@@ -227,15 +227,14 @@ X <- cbind(rep(1, dim(X)[1]), X)
 log_ver <- function(b){
   #b tiene que ser un vector k+1 = 14 + 1 dimensional
   
-  lv <- sum((datos$sal_med)*(as.matrix(X)%*%b)) - sum(log(1-exp(as.matrix(X)%*%b))) 
+  lv <- sum((as.numeric(datos$sal_med))*(as.matrix(X)%*%b)) - sum(log(1+exp(as.matrix(X)%*%b))) 
   
   return(lv)
 }
 
-btest = rep(0.5,15)
 ```
 
-Para emplear los métodos numéricos de optimización antes mencionados haremos uso de las funciones para aplicarlos vistas en el curso, las que fue necesario modificar para que fuera posible emplear aproximaciones numéricas del gradiente y la hessiana de la log-verosimilitud. 
+Para emplear los métodos numéricos de optimización antes mencionados haremos uso de las funciones para aplicarlos vistas en el curso, las que fue necesario modificar para que fuera posible emplear aproximaciones numéricas del gradiente y la hessiana de la log-verosimilitud en vez de ser estas calculadas manualmente. 
 
 ### Ascenso más rápido
 
@@ -353,6 +352,33 @@ ascenso <- function(FUN,x0,tol=1e-5,maxiter=1000,mostrar=TRUE,a_max=1,tau=0.5,ma
 	salida<-list(x_max=x1,fx_max=FUN(x1),iter=iter)
 	return(salida)
 }
+```
+Para comenzar con este método y verificar que las funciones se desempeñan correctamente, probamos suministrándole como valores iniciales los estimados mediante la función _glm()_. A continuación, se presenta un cuadro comparando los valores de ambas estimaciones:
+
+```{r, echo = FALSE}
+pars_ctrl <- c(summary(modelo_ctrl)$coefficients[,1])
+
+asce1 <- ascenso(log_ver, pars_ctrl)
+
+
+xtable(cbind(pars_ctrl, as.numeric(asce1$x_max)), 
+       digits = 9,
+       caption = "Comparación de las estimaciones de glm() y el método del ascenso más rápido")
+```
+
+Se puede apreciar, como era de esperarse, la similitud entre ambas estimaciones, generalmente difiriendo recién a partir del sexto valor después de la coma.
+
+
+Probemos  ahora con un vector de valores iniciales ($x_0$) compuesto solo de ceros. Esto nos lleva a que la busqueda lineal falle reiteradamente, hasta llegar al máximo de iteraciones asignadas a la función que hace dicha búsqueda, 1000.
+
+
+```{r}
+```
+
+
+
+```{r, echo = FALSE}
+
 ```
 
 
