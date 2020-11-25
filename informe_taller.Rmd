@@ -65,8 +65,145 @@ library(mfx)
 
 # Resumen ejecutivo
 
+# Analisis descriptivo de los datos
+
+La base cuenta con observaciones de 526 personas y con las siguientes 22 variables: Salario (promedio por hora, medido en dólares), Años de Educación, Años de Experiencia, Antigüedad, Raza (variable indicadora, 1 si la persona no es de raza blanca), Sexo, Estado Civil (vale 1 si la persona está casada), Número de Dependientes, Región Metropolitana (vale 1 si la persona vive en dicha región), Región (dividida en tres variales indicadoras: Norte, Sur y Oeste), Rama de Actividad (dividida en tres variables indicadoras: Construcción, Comercio y Servicios), Ocupación (tres variables indicadoras: Profesional, Administrativos y Servicios), el logaritmo de la variable Salario y los cuadrados de las variables Experiencia y Antigüedad.
+
+Lo primero es analizar como se distribuyen la población de acuerdo a las variables categóricas (Región, Rama de actividad,  Ocupación, Raza, Sexo y Estado civil). Para las primeras cuatro variables buscamos saber cuantos individuos corresponden a cada rama, y aplicar medidas de resumen de la variable salario para cada categoría de las otras tres variables.
+
+```{r tablasregion, results='asis'}
+resumen_tot1 <- datos %>%
+                 summarise(region = "Todas",
+                           Cantidad=n(),
+                           `Mínimo`= min(salario),
+                           Media=mean(salario),
+                           `Máximo` = max(salario)) %>% 
+                rename(`Región` = "region")
+
+resumen_tot2 <- datos %>%
+                 summarise(rama_act = "Todas",
+                           Cantidad=n(),
+                           `Mínimo`= min(salario),
+                           Media=mean(salario),
+                           `Máximo` = max(salario)) %>% 
+                 rename(`Rama de Actividad` = "rama_act")
+
+resumen_tot3 <- datos %>%
+                 summarise(ocupacion = "Todas",
+                           Cantidad=n(),
+                           `Mínimo`= min(salario),
+                           Media=mean(salario),
+                           `Máximo` = max(salario)) %>%
+                 rename(`Ocupación` = "ocupacion")
+                 
+resumen_reg <- datos %>%
+                group_by(region) %>%
+                summarise(Cantidad=n(),
+                          `Mínimo`= min(salario),
+                          Media=mean(salario),
+                          `Máximo` = max(salario)) %>%
+                arrange(fct_relevel(region,
+                                    "northcen",
+                                    "south",
+                                    "east",
+                                    "west")) %>% 
+                mutate(region = fct_recode(region,
+                                           "Norte"="northcen",
+                                           "Sur"="south",
+                                           "Este"="east",
+                                           "Oeste"="west")) %>% 
+                rename(`Región`="region")
+  
+resumen_rama_act <- datos %>% 
+                     group_by(rama_act) %>% 
+                     summarise(Cantidad=n(),
+                               `Mínimo`= min(salario),
+                               Media=mean(salario),
+                               `Máximo` = max(salario)) %>%
+                     arrange(fct_relevel(rama_act,
+                                         "construc",
+                                         "services",
+                                         "trade",
+                                         "otros")) %>% 
+                     mutate(rama_act = fct_recode(rama_act,
+                                                  "Construcción"="construc",
+                                                  "Servicios"="services",
+                                                  "Comercio"="trade",
+                                                  "Otros"="otros")) %>% 
+                     rename(`Rama de Actividad` = "rama_act") 
+
+resumen_ocupacion <- datos %>% 
+                      group_by(ocupacion) %>% 
+                      summarise(Cantidad=n(),
+                                `Mínimo`= min(salario),
+                                Media=mean(salario),
+                                `Máximo` = max(salario)) %>%
+                      arrange(fct_relevel(ocupacion,
+                                          "servocc",
+                                          "clerocc",
+                                          "profocc",
+                                          "otros")) %>% 
+                      mutate(ocupacion = fct_recode(ocupacion,
+                                                   "Servicio"="servocc",
+                                                   "Administrativos"="clerocc",
+                                                   "Profesional"="profocc",
+                                                   "Otros"="otros")) %>%
+                      rename(`Ocupación` = "ocupacion")
+                     
 
 
+  
+
+
+propfem <- table(as.factor(datos$female))/dim(datos)[1]
+propwhite <- table(as.factor(datos$nonwhite))/dim(datos)[1]
+propmarr <- table(as.factor(datos$married))/dim(datos)[1]
+propmetro <- table(as.factor(datos$reg.metro))/dim(datos)[1]
+```
+## Región
+
+Nos indica en qué región se ubican los individuos. Las categorías de esta variable son Norte, Sur, Este y Oeste.
+Tenemos 3 variables indicadoras para esta región, Norte-Centro, Sur y Oeste. Este es la categoría de referencia, la cual no cuenta con variable indicadora ya que en este caso la matriz de datos $\mathbb{X}$ no sería de rango completo y por lo tanto no sería invertible, lo que más adelante impediría la estimación única de los coeficientes. Esto ocurre análogamente para las otras variables cualitativas.
+
+```{r muestrotablasregion, results='asis', include=TRUE}
+rbind(resumen_reg, resumen_tot1) %>% 
+       xtable(caption = "Algunas medidas de resumen para las distintas regiones.")
+```
+Se observa que la región Oeste tiene pocos individuos en comparación con las otras, sobre todo con la zona Sur que es la que contiene más individuos.
+En cuanto al salario, la media en las zonas Norte y Sur es menor que la media total de las observaciones. En cuanto a los máximos, se ve todos rondan entre 20 y 25 aproximadamente. Los mínimos también se asimilan entre sí, excepto la zona Oeste que tiene un mínimo de casi la tercera parte de los demás. 
+
+## Rama de actividad
+
+```{r muestrotablasramas_act, results='asis', include=TRUE}
+ rbind(resumen_rama_act, resumen_tot2) %>% 
+       xtable(caption = "Algunas medidas de resumen para las distintas ramas de actividad.")
+```
+
+Se observa una distribución muy desigual entre las cuatro opciones de respueta, pero en "Otros" es donde más observaciones hay, incluso más de la mitad. 
+En cuanto al salario, observamos que Construcción tiene el mayor mínimo de las 4 opciones, con una media similar a la media total, pero un máximo un poco bajo. En el caso de Servicios, vemos que tiene el mínimo, la media y el máximo menor de todas. Comercio tiene una media similar a la de Servicios aunque su máximo y su mínimo es mayor. 
+
+## Ocupación
+
+```{r muestrotablasocupacion, results='asis', include=TRUE}
+rbind(resumen_ocupacion, resumen_tot3) %>% 
+       xtable(caption = "Algunas medidas de resumen para las distintas ocupaciones.")
+```
+
+Se observa que la media y el máximo de Profesionales es la mayor de todas, algo de esperarse, que una persona que se desempeña como profesional tenga un salario mayor. 
+Para Administrativos se ve que tiene el mayor mínimo y el menor máximo, por lo que podríamos considerar que los salarios no varían tanto. 
+Para los trabajadores del área de Servicios, vemos que tienen un mínimo, media y máximo menor, por lo que podemos decir que en promedio el salario es menor. 
+
+## Otras variables categóricas
+
+Con el resto de las variables econtramos que las proporciones entre las categorías son:
+
+* Para la variable Sexo hay un `r percent(propfem[2], accuracy = 0.01)` de mujeres y  `r percent(propfem[1], accuracy = 0.01)` de hombres. La proporción de la mitad cada sexo.
+
+* Para la variable Estado Civil hay un `r percent(propmarr[2], accuracy = 0.01)` de casados y  `r percent(propmarr[1], accuracy = 0.01)` de no casados.
+
+* Para la variable Área Metropolitana hay un `r percent(propmetro[2], accuracy = 0.01)` de personas que habitan en la misma y  `r percent(propmetro[1], accuracy = 0.01)` que no. Predomina bastante la población metropolitana.
+
+* Para la variable Raza hay un `r percent(propwhite[2],accuracy = 0.01)` de personas no blancas  y  `r percent(propwhite[1], accuracy = 0.01)` blancas. El resultado es de esperarse dado que las personas no blancas son una minoría en los Estados Unidos.
 
 # Presentación del problema
 
