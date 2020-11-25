@@ -38,6 +38,7 @@ library(readr)
 library(janitor)
 library(xtable)
 library(mfx)
+library(scales)
 ```
 
 \title{Modelización lineal del salario}
@@ -89,9 +90,6 @@ datos <- datos %>%
 
 
 
-
-
-
 #datos con variables indicadoras categoricas y hacemos categorica la variable salario (usamos las categorias menor a 15 y mayor a 15 dolares por hora)
 datos <- datos %>% 
   mutate(
@@ -118,12 +116,6 @@ datos <- datos %>%
     educsq = educ^2
   ) %>% 
   dplyr::select(-profserv)
-
-
-
-
-
-
 ```
 
 La base cuenta con observaciones de 526 personas y con las siguientes 22 variables: Salario (promedio por hora, medido en dólares), Años de Educación, Años de Experiencia, Antigüedad, Raza (variable indicadora, 1 si la persona no es de raza blanca), Sexo, Estado Civil (vale 1 si la persona está casada), Número de Dependientes, Región Metropolitana (vale 1 si la persona vive en dicha región), Región (dividida en tres variales indicadoras: Norte, Sur y Oeste), Rama de Actividad (dividida en tres variables indicadoras: Construcción, Comercio y Servicios), Ocupación (tres variables indicadoras: Profesional, Administrativos y Servicios), el logaritmo de la variable Salario y los cuadrados de las variables Experiencia y Antigüedad.
@@ -137,7 +129,7 @@ resumen_tot1 <- datos %>%
                            `Mínimo`= min(salario),
                            Media=mean(salario),
                            `Máximo` = max(salario)) %>% 
-                rename(`Región` = "region")
+                  rename(`Región` = "region")
 
 resumen_tot2 <- datos %>%
                  summarise(rama_act = "Todas",
@@ -161,12 +153,12 @@ resumen_reg <- datos %>%
                           `Mínimo`= min(salario),
                           Media=mean(salario),
                           `Máximo` = max(salario)) %>%
-                arrange(fct_relevel(region,
+                arrange(forcats::fct_relevel(region,
                                     "northcen",
                                     "south",
                                     "east",
                                     "west")) %>% 
-                mutate(region = fct_recode(region,
+                mutate(region = forcats::fct_recode(region,
                                            "Norte"="northcen",
                                            "Sur"="south",
                                            "Este"="east",
@@ -179,12 +171,12 @@ resumen_rama_act <- datos %>%
                                `Mínimo`= min(salario),
                                Media=mean(salario),
                                `Máximo` = max(salario)) %>%
-                     arrange(fct_relevel(rama_act,
+                     arrange(forcats::fct_relevel(rama_act,
                                          "construc",
                                          "services",
                                          "trade",
                                          "otros")) %>% 
-                     mutate(rama_act = fct_recode(rama_act,
+                     mutate(rama_act = forcats::fct_recode(rama_act,
                                                   "Construcción"="construc",
                                                   "Servicios"="services",
                                                   "Comercio"="trade",
@@ -197,12 +189,12 @@ resumen_ocupacion <- datos %>%
                                 `Mínimo`= min(salario),
                                 Media=mean(salario),
                                 `Máximo` = max(salario)) %>%
-                      arrange(fct_relevel(ocupacion,
+                      arrange(forcats::fct_relevel(ocupacion,
                                           "servocc",
                                           "clerocc",
                                           "profocc",
                                           "otros")) %>% 
-                      mutate(ocupacion = fct_recode(ocupacion,
+                      mutate(ocupacion = forcats::fct_recode(ocupacion,
                                                    "Servicio"="servocc",
                                                    "Administrativos"="clerocc",
                                                    "Profesional"="profocc",
@@ -327,65 +319,6 @@ $$H_{n+1} = (I  - \frac{1}{y^T_ns_n}s_ny^T_n) H_n (I - \frac{ 1}{y^T_ns_n}y_ns^T
 
 
 # Datos utilizados (Aplicación)
-
-```{r, results='hide', echo = FALSE}
-#Arreglo inicial de los datos
-
-datos <- read_delim("wage1.txt", delim = "\t") %>% 
-  as.data.frame %>% 
-  clean_names() %>%
-  rename(salario = "wage", reg.metro = "smsa", log.salario= "lwage")
-
-as.numeric(sapply(datos, is.numeric))
-
-names(subset(datos, select=!as.numeric(sapply(datos, is.numeric))))
-
-sapply(subset(datos, select=!as.numeric(sapply(datos, is.numeric))), class)
-
-head(subset(datos, select=!as.numeric(sapply(datos, is.numeric))))
-
-datos <- datos %>%
-  mutate(salario = gsub(",", ".", salario), log.salario = gsub(",", ".", log.salario) ) %>% 
-  mutate_at(c("salario", "log.salario"), as.numeric)
-
-
-
-
-
-
-#datos con variables indicadoras categoricas y hacemos categorica la variable salario (usamos las categorias menor a 15 y mayor a 15 dolares por hora)
-datos <- datos %>% 
-  mutate(
-    region = as.factor(case_when(
-               northcen == 1 ~ "northcen",
-               south == 1 ~ "south",
-               west == 1 ~ "west",
-               northcen + south + west == 0 ~ "east"
-               )),
-    rama_act = as.factor(case_when(
-                 construc == 1 ~ "construc",
-                 trade == 1 ~ "trade",
-                 services == 1 ~ "services",
-                 construc + trade + services == 0 ~ "otros"
-               )),
-    ocupacion = as.factor(case_when(
-                 profocc == 1 ~ "profocc",
-                 clerocc == 1 ~ "clerocc",
-                 servocc == 1 ~ "servocc",
-                 profocc + clerocc + servocc == 0 ~ "otros",
-    )),
-    sal_med = ifelse(salario >= 5.896103 , 1, 0),
-          
-    educsq = educ^2
-  ) %>% 
-  dplyr::select(-profserv)
-
-
-
-
-
-
-```
 
 ## Estimando mediante las funciones base
 
@@ -554,7 +487,7 @@ Para comenzar con este método y verificar que las funciones se desempeñan corr
 ```{r, echo = FALSE}
 pars_ctrl <- c(summary(modelo_ctrl)$coefficients[,1])
 
-asce1 <- ascenso(log_ver, pars_ctrl)
+asce1 <- ascenso(FUN = log_ver, x0 = pars_ctrl)
 
 
 xtable(cbind(pars_ctrl, as.numeric(asce1$x_max)), 
@@ -562,20 +495,50 @@ xtable(cbind(pars_ctrl, as.numeric(asce1$x_max)),
        caption = "Comparación de las estimaciones de glm() y el método del ascenso más rápido")
 ```
 
-Se puede apreciar, como era de esperarse, la similitud entre ambas estimaciones, generalmente difiriendo recién a partir del sexto valor después de la coma.
+Se puede apreciar, como era de esperarse, la similitud entre ambas estimaciones, generalmente difiriendo recién a partir del sexto valor después de la coma. Toma solo una iteración tener este resultado.
+
+Probemos  ahora con un vector de valores iniciales ($x_0$) compuesto solo de ceros. Esto nos lleva a que el algoritmo no converja a una solución, dadas las 1000 asignadas. Incluso asignando el doble de iteraciones el resultado continúa siendo el mismo. Esto nos lleva a pensar que se necesita un mejor punto de inicio para que el algoritmo converja más velozmente, es decir, uno más cercano al verdadero valor que máximiza la log-verosimilitud.
 
 
-Probemos  ahora con un vector de valores iniciales ($x_0$) compuesto solo de ceros. Esto nos lleva a que la busqueda lineal falle reiteradamente, hasta llegar al máximo de iteraciones asignadas a la función que hace dicha búsqueda, 1000.
+```{r,echo= FALSE}
+#CUIDADO, tarda, se comentan para que la compilacion del rmd tarde menos
+#asce2 <- ascenso(log_ver, rep(0, 15))
 
-
-```{r}
+#asce3 <- ascenso(log_ver, rep(0, 15), maxiter = 2000)
 ```
 
-
+Para encontrar un buen vector de valores iniciales podemos recurrir a usar una grilla de valores para cada coeficiente o probar utilizando estimaciones iniciales dadas por el método de mínimos cuadrados ordinarios (MCO). Comenzando por este último camino, las estimaciones por MCO son:
 
 ```{r, echo = FALSE}
+mod_mco <- lm(salario ~ female + educ + exper + tenure + northcen + south + west + reg.metro + construc + services + trade + profocc + clerocc + servocc, data = datos)
+
+summMCO <- as.data.frame(summary(mod_mco)$coefficients[,1])
+
+xtable(summMCO, digits = 6)
+```
+
+
+```{r, echo= FALSE}
+#asce4 <- ascenso(log_ver, summary(mod_mco)$coefficients[,1])
+
+#asce5 <- ascenso(log_ver, summary(mod_mco)$coefficients[,1], maxiterbt = 20)
+
+#asce6 <- ascenso(log_ver, summary(mod_mco)$coefficients[,1], maxiter = 2000)
+
+#asce7 <- ascenso(log_ver, summary(mod_mco)$coefficients[,1], maxiter = 3000, maxiter_bt = 20)
 
 ```
+
+Pero este camino no nos lleva a que se alcance la convergencia del algoritmo, incluso permitiéndole al algoritmo utilizar 3000 iteraciones. Aunque puede que se encuentre la solución con un mayor número de iteraciones, conviene encontrar un punto de arranque que permita llegar a la convergencia en un número menor de iteraciones y por lo tanto en menor tiempo. Otra opción anteriormente mencionada es hacer una grilla de valores que puede tomar el vector inicial e ir usándolos hasta encontrar uno que nos permita cumplir nuestro objetivo.
+
+```{r, echo = TRUE}
+
+vg <- seq(-2,2,1)
+
+#vector demasiado grande
+#grilla <- expand.grid(vg,vg,vg,vg,vg,vg,vg,vg,vg,vg,vg,vg,vg,vg,vg)
+```
+
 
 
 ### Método de Newton 
