@@ -37,11 +37,10 @@ library(dplyr)
 library(readr)
 library(janitor)
 library(xtable)
-library(mfx)
 library(scales)
 ```
 
-\title{Modelización lineal del salario}
+\title{Estimación de un modelo lineal del salario mediante métodos numéricos}
 \author{Valentina Caldiroli, Maximiliano Saldaña}
 \date{Noviembre 2020}
 
@@ -322,7 +321,7 @@ $$H_{n+1} = (I  - \frac{1}{y^T_ns_n}s_ny^T_n) H_n (I - \frac{ 1}{y^T_ns_n}y_ns^T
 
 ## Estimando mediante las funciones base
 
-Inicialmente para tener como referencia y para comparar, estimaremos el modelo mediante la función de R _glm_.
+Inicialmente para tener como referencia y para comparar, estimaremos el modelo mediante la función de R _glm()_ del paquete base _stats_, la cual hace uso del método de estimación por mínimos cuadrados iterativamente re-ponderados (IWLS) (R Core Team, 2020 documentacion)
 
 ```{r, echo = FALSE}
 #modelo logit
@@ -335,10 +334,6 @@ summary(modelo_ctrl)
 
 Se puede observar que no todas las variables del conjunto resultan estadísticamente significativas.
 
-```{r, echo=FALSE}
-#comentar esto o eliminarlo?
-mfx::logitor(sal_med ~ female + educ + exper + tenure + northcen + south + west + reg.metro + construc + services + trade + profocc + clerocc + servocc, data = datos)
-```
 
 ## Estimación mediante los métodos vistos en clase
 
@@ -493,9 +488,38 @@ asce1 <- ascenso(FUN = log_ver, x0 = pars_ctrl)
 xtable(cbind(pars_ctrl, as.numeric(asce1$x_max)), 
        digits = 9,
        caption = "Comparación de las estimaciones de glm() y el método del ascenso más rápido")
+
+max(pars_ctrl- as.numeric(asce1$x_max))
 ```
 
-Se puede apreciar, como era de esperarse, la similitud entre ambas estimaciones, generalmente difiriendo recién a partir del sexto valor después de la coma. Toma solo una iteración tener este resultado.
+\begin{table}[H]
+\centering
+\begin{tabular}{rrr}
+  \hline
+ & glm() & Ascenso \\ 
+  \hline
+(Intercept) & -4.442367437 & -4.442367437 \\ 
+  female & -1.194755469 & -1.194755469 \\ 
+  educ & 0.277912495 & 0.277912308 \\ 
+  exper & 0.007568890 & 0.007568376 \\ 
+  tenure & 0.083587709 & 0.083587627 \\ 
+  northcen & -0.012727340 & -0.012727340 \\ 
+  south & 0.035935951 & 0.035935951 \\ 
+  west & 0.688820844 & 0.688820844 \\ 
+  reg.metro & 0.745975971 & 0.745975971 \\ 
+  construc & -0.363769611 & -0.363769611 \\ 
+  services & -0.493415175 & -0.493415175 \\ 
+  trade & -1.429567604 & -1.429567604 \\ 
+  profocc & 0.854540015 & 0.854540015 \\ 
+  clerocc & -0.585495085 & -0.585495085 \\ 
+  servocc & -1.209387935 & -1.209387935 \\ 
+   \hline
+\end{tabular}
+\caption{Comparación de las estimaciones de glm() y el método del ascenso más rápido} 
+\end{table}
+
+
+Se puede apreciar, como era de esperarse, la similitud entre ambas estimaciones, difiriendo a lo sumo recién a partir del sexto valor después de la coma (se fijó una tolerancia de $10^{-5}$). Toma solo una iteración tener este resultado. Reduciendo la tolerancia la diferencia entre las estimaciones por los dos métodos se hace menor, pero toma más iteraciones y es necesario permitir más iteraciones de la búsqueda lineal, además de que se necesita hacer _forward-tracking_ en varios pasos. Esto último quiere decir que fue necesario agrandar la longitud del paso de la búsqueda para que se cumpliera la condición de la curvatura. 
 
 Probemos  ahora con un vector de valores iniciales ($x_0$) compuesto solo de ceros. Esto nos lleva a que el algoritmo no converja a una solución, dadas las 1000 asignadas. Incluso asignando el doble de iteraciones el resultado continúa siendo el mismo. Esto nos lleva a pensar que se necesita un mejor punto de inicio para que el algoritmo converja más velozmente, es decir, uno más cercano al verdadero valor que máximiza la log-verosimilitud.
 
@@ -543,6 +567,8 @@ vg <- seq(-2,2,1)
 
 ### Método de Newton 
 
+Dado el problema de la velocidad de convergencia del método anterior, parece una buena opción intentar solucionar el problema con el método de Newton. Este último acelera la convergencia del método del ascenso más rápido la incorporar información de la hessiana de la función en el algoritmo.
+
 ```{r, echo = FALSE}
 #metodo de newton
 
@@ -582,7 +608,60 @@ chequeo<-function(M){
 }
 ```
 
+Para que en efecto el método de Newton converja a un máximo y no a un mínimo, tenemos que tener una hessiana definida negativa, así que por lo menos en el primer paso debemos que comprobar que la hessiana evaluada en el vector inicial cumpla esta condición. A modo de comprobar esto, utilizamos una función vista en el curso que calcula los vectores propios de la hessiana inicial, si todos ellos resultan negativos la matriz es definida negativa. 
 
+Al igual que con el método anterior, comencemos con el punto inicial de "control", el vector de estimaciones dadas por la función _glm()_. Primero hay que comprobar que la hessiana de la log-verosimilitud evaluada en dicho vector es definida negativa con la función antes mencionada, lo que nos da como resultado que en efecto es definida negativa. Entonces nos disponemos a utilizar el algoritmo de Newton.
+
+```{r}
+check1 <- chequeo(hessiana(log_ver, pars_ctrl))
+```
+
+```{r}
+newton1 <-newton(log_ver, pars_ctrl)
+```
+Análogamente a lo que ocurrió con el método del ascenso más rápido, el de Newton converge en una iteración a valores muy similares a los obtenidos con la función _glm()_. Cabe destacar que la búsqueda lineal necesito hacer _forward-tracking_.
+
+Ahora intentemos utilizar como vector inicial el compuesto por ceros. La hessiana de la log-verosimilitud resulta definida negativa al evaluarla en el vector, por lo que en un principio puede ser un candidato.
+
+```{r, echo = FALSE}
+check2 <- chequeo(hessiana(log_ver, rep(0,15)))
+```
+```{r, echo=FALSE}
+newton2 <-newton(log_ver, rep(0,15))
+```
+
+```{r, echo=FALSE}
+xtable(cbind(pars_ctrl, as.numeric(newton2$x_max)), 
+       digits = 9,
+       caption = "Comparación de las estimaciones de glm() y el método del ascenso más rápido")
+```
+\begin{table}[H]
+\centering
+\begin{tabular}{rrr}
+  \hline
+ & glm() & Newton\\ 
+  \hline
+(Intercept) & -4.442367437 & -4.442363082 \\ 
+  female & -1.194755469 & -1.194755231 \\ 
+  educ & 0.277912495 & 0.277912242 \\ 
+  exper & 0.007568890 & 0.007568853 \\ 
+  tenure & 0.083587709 & 0.083587710 \\ 
+  northcen & -0.012727340 & -0.012727760 \\ 
+  south & 0.035935951 & 0.035935444 \\ 
+  west & 0.688820844 & 0.688820173 \\ 
+  reg.metro & 0.745975971 & 0.745975951 \\ 
+  construc & -0.363769611 & -0.363771043 \\ 
+  services & -0.493415175 & -0.493415066 \\ 
+  trade & -1.429567604 & -1.429567877 \\ 
+  profocc & 0.854540015 & 0.854540092 \\ 
+  clerocc & -0.585495085 & -0.585495421 \\ 
+  servocc & -1.209387935 & -1.209388297 \\ 
+   \hline
+\end{tabular}
+\caption{Comparación de las estimaciones de glm() y el método del ascenso más rápido} 
+\end{table}
+
+Podemos ver que este método convergió rápidamente, en tan solo tres iteraciones y necesitando hacer _forward-tracking_ solo una vez. En este caso el vector nulo parece ser una buena opción de vector inicial.
 
 ### Método de Broyden-Fletcher-Goldfarg-Shanno
 
