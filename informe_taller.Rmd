@@ -664,8 +664,7 @@ xtable(cbind(pars_ctrl, as.numeric(newton2$x_max)),
 \caption{Comparación de las estimaciones de glm() y el método del ascenso más rápido} 
 \end{table}
 
-Podemos ver que este método convergió rápidamente, en tan solo tres iteraciones y necesitando hacer _forward-tracking_ solo una vez. En este caso el vector nulo parece ser una buena opción de vector inicial.
-
+Podemos ver que este método convergió rápidamente, en tan solo tres iteraciones y necesitando hacer _forward-tracking_ solo una vez. En este caso el vector nulo parece ser una buena opción de punto de arranque si no se cuenta con información sobre los coeficientes a estimar.
 
 
 
@@ -675,13 +674,21 @@ Podemos ver que este método convergió rápidamente, en tan solo tres iteracion
 #metodo bfgs
 
 bfgs<-function(FUN,x0,tol=1e-5,maxiter=1000,mostrar=TRUE,a_max=1,tau=0.5,maxiter_bt=10,c1=1e-4,c2=0.9,tau2=0.8,trace_bl=mostrar){
-	H<- -diag(length(x0))
-	pn <- df0 <- -H%*%gradiente(FUN,x0)
-	alfa<-blineal(FUN,dFUN,x0,pn,a_max=a_max,tau=tau,maxiter_bt=maxiter_bt,c1=c1,c2=c2,tau2=tau2,mostrar_bl=trace_bl)
+	H <- -diag(length(x0))
+	dFUN <- gradiente(FUN,x0)
+	pn <- -H %*% dFUN
+	df0 <- -H %*% dFUN
+	
+	alfa<-blineal(FUN,x0,pn,a_max=a_max,tau=tau,maxiter_bt=maxiter_bt,c1=c1,c2=c2,tau2=tau2,mostrar_bl=trace_bl)
+	
 	an<-alfa$alfa
+	
 	x1<-x0+an*pn
+	
 	df1<-gradiente(FUN, x1)
+	
 	iter<-1
+	
 	cambio<-sum(pn^2)
 	Id<--H
 
@@ -707,6 +714,13 @@ bfgs<-function(FUN,x0,tol=1e-5,maxiter=1000,mostrar=TRUE,a_max=1,tau=0.5,maxiter
 	return(salida)
 }
 
+```
+
+Este método está comprendido dentro de la categoría de los de Cuasi-Newton. En vez de requerir la evaluación de la hessiana de la función a maximizar, en estos métodos se la aproxima utilizando la información de lo cambios en el gradiente. Al ahorrarse la evaluación de la hessiana, estos métodos pueden resultar más veloces que el de Newton, aunque esto también dependerá del vector inicial empleado; el de Newton tenderá a tomar menos iteraciones si se comienza más cerca de la solución. De todas maneras resulta necesario una evaluación inicial de la hessiana, que se puede elegir como el opuesto de la matriz identidad, cuya dimensión es la cantidad de variables de la función a optimizar. Para actualizar la hessiana hay múltiples soluciones, se empleará el método de Broyden-Fletcher-Goldfarg-Shanno a modo ilustrativo.
+
+
+```{r}
+bfgs1 <- bfgs(log_ver, rep(0,15))
 ```
 
 
