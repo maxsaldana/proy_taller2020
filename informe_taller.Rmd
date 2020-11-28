@@ -65,6 +65,69 @@ library(scales)
 
 # Resumen ejecutivo
 
+
+
+# Presentación del problema
+
+El objetivo de este proyecto es estimar un modelo logístico mediante un método de máxima verosimilitud que aplique los métodos de optimización del curso y comparar el desempeño de nuestra estimación con el de las funciones base de R. Se hará uso de una base de salarios de Estados Unidos del año 1976, extraída del libro _Introducción a la Econometría, Un enfoque moderno (2009)_ de J.M. Wooldridge. La variable a ser explicada es una indicadora que vale 1 cuando el salario de la persona es mayor o igual del promedio y 0 cuando es menor. Las variables explicativas (que se eligieron en base a lo ya trabajado en el curso Modelos Lineales) serán el sexo de la persona, su educación, experiencia, antigüedad, región (dividida en Norte, Sur, Este y Oeste), si vive en una región metropolitana, rama de actividad (dividida en Construcción, Comercio, Servicios y Otros) y Ocupación (dividida en Profesional, Administrativos, Servicios y Otros).
+
+El modelo en cuestión es de la forma siguiente _(Nalbarte, 2020)_:
+
+<!-- Plantearlo asi en generico o particular? -->
+
+$$P(Y_i = 1) = \frac{exp(x'_i\beta)}{1+exp(x'_i\beta)} = \pi_i = E(y_i)$$
+
+Donde $x'_i\beta = \beta_0 + \beta_1 x_{i1} + \dots + \beta_1 x_{ip}$ (siendo $p$ el número de variables explicativas)
+
+La función de unión (la que vincula $E(y_i)$ con $x'_i$) es:
+
+$$log_e \left[\frac{\pi_i}{1-\pi_i}\right] = exp(x'_i\beta) $$
+
+El problema de estimar el vector de parámetros $\beta$ se traduce en un problema de optimización, ya que buscamos que dicho vector sea el que maximice la función de verosimilitud de $Y$. Como $Y_i$ son variables aleatorias Bernoulli independientes e idénticamente distribuidas $\forall \,\, i=1,\dots,n$ la función de verosimilitud es:
+
+$$L(\pi_1, \dots, \pi_n  | Y_1, \dots, Y_n) = \prod_{i=1}^n f_{Y_i}(y_i) = \prod_{i=1}^n \pi_i^{y_i}(1- \pi_i^{y_i})^{1-y_i}$$
+Resulta equivalente trabajar con el logaritmo de la verosimilitud, que es:
+
+$$log \,L(\pi_1, \dots, \pi_n  | Y_1, \dots, Y_n) = log \, \prod_{i=1}^n \pi_i^{y_i}(1- \pi_i^{y_i})^{1-y_i} = \sum_{i=1}^n \left[ Y_i log \left( \frac{\pi}{1+\pi} \right) \right] + \sum_{i=1}^n log(1-\pi_i)$$
+
+Teniendo en cuenta que:
+
+$$1-\pi_i = [1+exp(x'_i\beta)]^{-1}$$
+$$\frac{\pi}{1+\pi} = exp(x'_i\beta)$$
+
+$$log \, L(\beta|Y) = \sum_{i=1}^n  Y_i (x'_i\beta)   - \sum_{i=1}^n log(1+ exp(x'_i\beta)) $$
+
+Estimaremos el vector $\beta$ que maximice la función anterior.
+
+
+# Metodología usada
+
+Para lograr optimizar la función de verosimilitud, se emplearán tres métodos estudiados en 
+el curso, denominados: Ascenso más rápido, Método de Newton, y Método de quasi-Newton, o también conocido como BFGS.
+El caso del primer método es utilizado en funciones contínuas con derivadas parciales de primer y segundo orden; su implementación se da a partir de una recursión dada por:
+$$X_{n+1} = X_n + \alpha_n p_n$$
+De donde se denota que $\alpha_n$ es la longitud de paso con la que se realizará la búsqueda, y $p_n$ es la dirección de búsqueda, determinada por $\nabla f(x)$ (vector de los gradientes), de modo que cuando la $|| \nabla f(x)|| > 0$ la función asciende, y una vez que $||\nabla f(x)|| = 0$ ese ascenso se detiene. Una vez definida la dirección del paso, se procese a la elección de la longitud, mediante:
+$$\alpha_n = max_\alpha  \phi(\alpha) = max_\alpha f(x_n + \alpha f(x_n))$$
+Para una elección correcta del $\alpha$ además es necesario aplicar las condiciones de Wolfe, son dos y se denominan Condición de ascenso más rápido:
+$$f(x_n +\alpha p_n) \ge f(x_n) +c_1 \alpha \nabla f (x_n)^T p_n$$
+Y la segunda es la condición de curvatura:
+$$\nabla f(x_n +\alpha_np_n)^T p_n \le c_2 \nabla f(x_n)^T p_n$$
+La primer condición impone que los valores aceptables de $\alpha$ son aquellos donde $f(x_{n+1})$ está por encima de la recta con pendiente $c_1 \nabla f(x_n)^T p_n$. La segunda  impone que el gradiente de $f(x_n +\alpha_n p_n)$ no sea demasiado “empinado” con respecto al gradiente de $f(x_n)$. 
+Una manera de encontrar un posible valor de $\alpha$ es mediante el algoritmo de backtracking. Este algoritmo comienza con un valor inicial $\alpha_{max}$ y lo contrae iterativamente hasta que se cumplen las condiciones de Wolfe.
+
+El método de Newton por su parte, agiliza la búsqueda del máximo mediante la implementación de la Hessiana, utilizando un polinomio de Taylor de segundo orden llegamos a:
+$$f(x_{n+1}) \approx f(x_n) - \nabla f(x_n)^T Hf(x_n) \nabla f(x_n)$$
+Para que se cumpla que sea una función creciente, entonces  $\nabla f(x_n)^T Hf(x_n) \nabla f(x_n) \le 0$, y esto solo sucede cuando $H_{f(x_n)}$ es definida negativa. Por lo que la recursión de Newton está definida de la siguiente manera:
+$$x_{n+1} = x_n - \alpha_n H^{-1}_{f(x_n)} \nabla f(x_n)$$
+Para la correcta utilización de este método se debe buscar un $x_0$ próximo al máximo que buscamos para que converja a él, o por lo menos si saber que le hessiana es definida negativa. 
+
+Los métodos de Quasi-Newton, solo necesitan de la función a maximizar y de su gradiente, que mediante las iteraciones va aproximando la Hessiana, por lo que alcanza un orden de convergencia superlineal, aunque puede llegar a ser mas veloz que el método de Newton por no tener que evaluar la Hessiana. Estos métodos son de la forma:
+$$ {n+1} = x_n + \alpha_n B^{-1}_n \nabla f(x_n)$$
+De donde $B_n$ es la aproximación de la Hessiana, dada por $B_{n+1}(x_{n+1} -x_n) = \nabla f(x_{n+1}) - \nabla f(x_n)$, que haciendo unos cambios de variables obtenes la ecuación de una recta secante $B_{n+1}s_n = y_n$, siendo $s_n = x_{n+1} - x_n$ y $y_n = \nabla f(x_{n+1}) -\nabla f(x_n)$. Para la aproximación de esa Hessiana existe varios métodos, uno es el de Davidon-Fletcher-Powell (DFP), y se plantea así: 
+$$H_{n+1} = H_n - \frac{H_n y_n y^T_n H_n}{y^T_n H_ny_n} + \frac{ s_ns^T_n}{y^T_ns_n}$$
+Un segundo método, surge de imponer la ecuación secante a la inversa de $B_n$, método planteado por Broyden-Fletcher-Goldfarg-Shanno,  y denominado BFGS. Esta recursión está dada por:
+$$H_{n+1} = (I  - \frac{1}{y^T_ns_n}s_ny^T_n) H_n (I - \frac{ 1}{y^T_ns_n}y_ns^T_n) + \frac{s_ns^T_n}{y^T_ns_n}$$
+
 # Analisis descriptivo de los datos
 
 ```{r, results='hide', echo = FALSE}
@@ -255,73 +318,12 @@ Con el resto de las variables econtramos que las proporciones entre las categor�
 
 * Para la variable Raza hay un `r percent(propwhite[2],accuracy = 0.01)` de personas no blancas  y  `r percent(propwhite[1], accuracy = 0.01)` blancas. El resultado es de esperarse dado que las personas no blancas son una minoría en los Estados Unidos.
 
-# Presentación del problema
 
-El objetivo de este proyecto es estimar un modelo logístico mediante un método de máxima verosimilitud que aplique los métodos de optimización del curso y comparar el desempeño de nuestra estimación con el de las funciones base de R. Se hará uso de una base de salarios de Estados Unidos del año 1976, extraída del libro _Introducción a la Econometría, Un enfoque moderno (2009)_ de J.M. Wooldridge. La variable a ser explicada es una indicadora que vale 1 cuando el salario de la persona es mayor o igual del promedio y 0 cuando es menor. Las variables explicativas (que se eligieron en base a lo ya trabajado en el curso Modelos Lineales) serán el sexo de la persona, su educación, experiencia, antigüedad, región (dividida en Norte, Sur, Este y Oeste), si vive en una región metropolitana, rama de actividad (dividida en Construcción, Comercio, Servicios y Otros) y Ocupación (dividida en Profesional, Administrativos, Servicios y Otros).
-
-El modelo en cuestión es de la forma siguiente _(Nalbarte, 2020)_:
-
-<!-- Plantearlo asi en generico o particular? -->
-
-$$P(Y_i = 1) = \frac{exp(x'_i\beta)}{1+exp(x'_i\beta)} = \pi_i = E(y_i)$$
-
-Donde $x'_i\beta = \beta_0 + \beta_1 x_{i1} + \dots + \beta_1 x_{ip}$ (siendo $p$ el número de variables explicativas)
-
-La función de unión (la que vincula $E(y_i)$ con $x'_i$) es:
-
-$$log_e \left[\frac{\pi_i}{1-\pi_i}\right] = exp(x'_i\beta) $$
-
-El problema de estimar el vector de parámetros $\beta$ se traduce en un problema de optimización, ya que buscamos que dicho vector sea el que maximice la función de verosimilitud de $Y$. Como $Y_i$ son variables aleatorias Bernoulli independientes e idénticamente distribuidas $\forall \,\, i=1,\dots,n$ la función de verosimilitud es:
-
-$$L(\pi_1, \dots, \pi_n  | Y_1, \dots, Y_n) = \prod_{i=1}^n f_{Y_i}(y_i) = \prod_{i=1}^n \pi_i^{y_i}(1- \pi_i^{y_i})^{1-y_i}$$
-Resulta equivalente trabajar con el logaritmo de la verosimilitud, que es:
-
-$$log \,L(\pi_1, \dots, \pi_n  | Y_1, \dots, Y_n) = log \, \prod_{i=1}^n \pi_i^{y_i}(1- \pi_i^{y_i})^{1-y_i} = \sum_{i=1}^n \left[ Y_i log \left( \frac{\pi}{1+\pi} \right) \right] + \sum_{i=1}^n log(1-\pi_i)$$
-
-Teniendo en cuenta que:
-
-$$1-\pi_i = [1+exp(x'_i\beta)]^{-1}$$
-$$\frac{\pi}{1+\pi} = exp(x'_i\beta)$$
-
-$$log \, L(\beta|Y) = \sum_{i=1}^n  Y_i (x'_i\beta)   - \sum_{i=1}^n log(1+ exp(x'_i\beta)) $$
-
-Estimaremos el vector $\beta$ que maximice la función anterior.
-
-
-# Metodología usada
-
-Para lograr optimizar la función de verosimilitud, se emplearán tres métodos estudiados en 
-el curso, denominados: Ascenso más rápido, Método de Newton, y Método de quasi-Newton, o también conocido como BFGS.
-El caso del primer método es utilizado en funciones contínuas con derivadas parciales de primer y segundo orden; su implementación se da a partir de una recursión dada por:
-$$X_{n+1} = X_n + \alpha_n p_n$$
-De donde se denota que $\alpha_n$ es la longitud de paso con la que se realizará la búsqueda, y $p_n$ es la dirección de búsqueda, determinada por $\nabla f(x)$ (vector de los gradientes), de modo que cuando la $|| \nabla f(x)|| > 0$ la función asciende, y una vez que $||\nabla f(x)|| = 0$ ese ascenso se detiene. Una vez definida la dirección del paso, se procese a la elección de la longitud, mediante:
-$$\alpha_n = max_\alpha  \phi(\alpha) = max_\alpha f(x_n + \alpha f(x_n))$$
-Para una elección correcta del $\alpha$ además es necesario aplicar las condiciones de Wolfe, son dos y se denominan Condición de ascenso más rápido:
-$$f(x_n +\alpha p_n) \ge f(x_n) +c_1 \alpha \nabla f (x_n)^T p_n$$
-Y la segunda es la condición de curvatura:
-$$\nabla f(x_n +\alpha_np_n)^T p_n \le c_2 \nabla f(x_n)^T p_n$$
-La primer condición impone que los valores aceptables de $\alpha$ son aquellos donde $f(x_{n+1})$ está por encima de la recta con pendiente $c_1 \nabla f(x_n)^T p_n$. La segunda  impone que el gradiente de $f(x_n +\alpha_n p_n)$ no sea demasiado “empinado” con respecto al gradiente de $f(x_n)$. 
-Una manera de encontrar un posible valor de $\alpha$ es mediante el algoritmo de backtracking. Este algoritmo comienza con un valor inicial $\alpha_{max}$ y lo contrae iterativamente hasta que se cumplen las condiciones de Wolfe.
-
-El método de Newton por su parte, agiliza la búsqueda del máximo mediante la implementación de la Hessiana, utilizando un polinomio de Taylor de segundo orden llegamos a:
-$$f(x_{n+1}) \approx f(x_n) - \nabla f(x_n)^T Hf(x_n) \nabla f(x_n)$$
-Para que se cumpla que sea una función creciente, entonces  $\nabla f(x_n)^T Hf(x_n) \nabla f(x_n) \le 0$, y esto solo sucede cuando $H_{f(x_n)}$ es definida negativa. Por lo que la recursión de Newton está definida de la siguiente manera:
-$$x_{n+1} = x_n - \alpha_n H^{-1}_{f(x_n)} \nabla f(x_n)$$
-Para la correcta utilización de este método se debe buscar un $x_0$ próximo al máximo que buscamos para que converja a él, o por lo menos si saber que le hessiana es definida negativa. 
-
-Los métodos de Quasi-Newton, solo necesitan de la función a maximizar y de su gradiente, que mediante las iteraciones va aproximando la Hessiana, por lo que alcanza un orden de convergencia superlineal, aunque puede llegar a ser mas veloz que el método de Newton por no tener que evaluar la Hessiana. Estos métodos son de la forma:
-$$ {n+1} = x_n + \alpha_n B^{-1}_n \nabla f(x_n)$$
-De donde $B_n$ es la aproximación de la Hessiana, dada por $B_{n+1}(x_{n+1} -x_n) = \nabla f(x_{n+1}) - \nabla f(x_n)$, que haciendo unos cambios de variables obtenes la ecuación de una recta secante $B_{n+1}s_n = y_n$, siendo $s_n = x_{n+1} - x_n$ y $y_n = \nabla f(x_{n+1}) -\nabla f(x_n)$. Para la aproximación de esa Hessiana existe varios métodos, uno es el de Davidon-Fletcher-Powell (DFP), y se plantea así: 
-$$H_{n+1} = H_n - \frac{H_n y_n y^T_n H_n}{y^T_n H_ny_n} + \frac{ s_ns^T_n}{y^T_ns_n}$$
-Un segundo método, surge de imponer la ecuación secante a la inversa de $B_n$, método planteado por Broyden-Fletcher-Goldfarg-Shanno,  y denominado BFGS. Esta recursión está dada por:
-$$H_{n+1} = (I  - \frac{1}{y^T_ns_n}s_ny^T_n) H_n (I - \frac{ 1}{y^T_ns_n}y_ns^T_n) + \frac{s_ns^T_n}{y^T_ns_n}$$
-
-
-# Datos utilizados (Aplicación)
+# Resultados
 
 ## Estimando mediante las funciones base
 
-Inicialmente para tener como referencia y para comparar, estimaremos el modelo mediante la función de R _glm()_ del paquete base _stats_, la cual hace uso del método de estimación por mínimos cuadrados iterativamente re-ponderados (IWLS) (R Core Team, 2020 documentacion)
+Inicialmente para tener como referencia y para comparar, estimaremos el modelo mediante la función de R _glm()_ del paquete base _stats_, la cual hace uso del método de estimación por mínimos cuadrados iterativamente re-ponderados (IWLS) (R Core Team, 2020 documentacion). Los resultados se visualizarán a la hora de comparar con los otros métodos.
 
 ```{r, echo = FALSE}
 #modelo logit
@@ -329,10 +331,9 @@ Inicialmente para tener como referencia y para comparar, estimaremos el modelo m
 modelo_ctrl <- glm(sal_med ~ female + educ + exper + tenure + northcen + south + west + reg.metro + construc + services + trade + profocc + clerocc + servocc, family = binomial (link = "logit") ,data = datos)
 
 
-summary(modelo_ctrl)
+cuadrovars <- xtable(as.data.frame(summary(modelo_ctrl)$coefficients[,1]), digits = 8)
 ```
 
-Se puede observar que no todas las variables del conjunto resultan estadísticamente significativas.
 
 
 ## Estimación mediante los métodos vistos en clase
@@ -521,6 +522,8 @@ max(pars_ctrl- as.numeric(asce1$x_max))
 
 Se puede apreciar, como era de esperarse, la similitud entre ambas estimaciones, difiriendo a lo sumo recién a partir del sexto valor después de la coma (se fijó una tolerancia de $10^{-5}$). Toma solo una iteración tener este resultado. Reduciendo la tolerancia la diferencia entre las estimaciones por los dos métodos se hace menor, pero toma más iteraciones y es necesario permitir más iteraciones de la búsqueda lineal, además de que se necesita hacer _forward-tracking_ en varios pasos. Esto último quiere decir que fue necesario agrandar la longitud del paso de la búsqueda para que se cumpliera la condición de la curvatura. 
 
+Debe tenerse en cuenta que esté y el resto de los métodos presentados cuando convergen lo hacen a _un_ máximo, lo que no significa que converjan al máximo global. Esto es una limitación ya que usualmente no tendremos la certeza de que haya un vector que haga aun mayor el valor de la función a maximizar. En el caso que se pueda, una manera subsanar esto es probando distintos puntos de arranque de una grilla y ver a donde convergen, si lo hacen a un mismo punto es evidencia a favor de que se está en presencia de un máximo. Posteriorimente se comentará sobre la creación de la grilla de valores en cuestión.  
+
 Probemos  ahora con un vector de valores iniciales ($x_0$) compuesto solo de ceros. Esto nos lleva a que el algoritmo no converja a una solución, dadas las 1000 asignadas. Incluso asignando el doble de iteraciones el resultado continúa siendo el mismo. Esto nos lleva a pensar que se necesita un mejor punto de inicio para que el algoritmo converja más velozmente, es decir, uno más cercano al verdadero valor que máximiza la log-verosimilitud.
 
 
@@ -531,16 +534,15 @@ Probemos  ahora con un vector de valores iniciales ($x_0$) compuesto solo de cer
 #asce3 <- ascenso(log_ver, rep(0, 15), maxiter = 2000)
 ```
 
-Para encontrar un buen vector de valores iniciales podemos recurrir a usar una grilla de valores para cada coeficiente o probar utilizando estimaciones iniciales dadas por el método de mínimos cuadrados ordinarios (MCO). Comenzando por este último camino, las estimaciones por MCO son:
+Para encontrar un buen vector de valores iniciales podemos recurrir a usar una grilla de valores para cada coeficiente o probar utilizando estimaciones iniciales dadas por el método de mínimos cuadrados ordinarios (MCO) y considerando el salario en vez de la indicadora utilizada. Esto último puede ser de utilidad ya que las estimaciones pueden dar una idea aproximada de la relación entre nuestra variable dependiente y sus regresores. 
 
 ```{r, echo = FALSE}
 mod_mco <- lm(salario ~ female + educ + exper + tenure + northcen + south + west + reg.metro + construc + services + trade + profocc + clerocc + servocc, data = datos)
 
 summMCO <- as.data.frame(summary(mod_mco)$coefficients[,1])
 
-xtable(summMCO, digits = 6)
+print.xtable(xtable(t(summMCO)), include.rownames=FALSE)
 ```
-
 
 ```{r, echo= FALSE}
 #asce4 <- ascenso(log_ver, summary(mod_mco)$coefficients[,1])
@@ -553,26 +555,26 @@ xtable(summMCO, digits = 6)
 
 ```
 
-Pero este camino no nos lleva a que se alcance la convergencia del algoritmo, incluso permitiéndole al algoritmo utilizar 3000 iteraciones. Aunque puede que se encuentre la solución con un mayor número de iteraciones, conviene encontrar un punto de arranque que permita llegar a la convergencia en un número menor de iteraciones y por lo tanto en menor tiempo. Otra opción anteriormente mencionada es hacer una grilla de valores que puede tomar el vector inicial e ir usándolos hasta encontrar uno que nos permita cumplir nuestro objetivo.
+Pero utilizar las estimaciones por MCO no nos lleva a que se alcance la convergencia del algoritmo, incluso permitiéndole al algoritmo utilizar 3000 iteraciones. Aunque puede que se encuentre la solución con un mayor número de iteraciones, conviene encontrar un punto de arranque que permita llegar a la convergencia en un número menor de iteraciones y por lo tanto en menor tiempo. Otra opción anteriormente mencionada es hacer una grilla de valores que puede tomar el vector inicial e ir usándolos hasta encontrar uno que nos permita cumplir nuestro objetivo. El problema con este camino es que incluso considerando un número reducido de valores para la grilla (por ejemplo, -2,-1,0,1 y 2) el espacio que ocuparía en la memoria es demasiado grande debido al número de coeficientes a estimar; sumándose a esto el elevado tiempo que implicaría utilizar suficientes valores iniciales distintos para encontrar uno que haga que el método del ascenso suficiente converja. Reduciendo aún más la grilla (los valores posibles son -1, 0 y 1) el primero problema se soluciona, pero sigue presente el segundo.
 
-```{r, echo = TRUE}
+```{r, echo = FALSE}
 
-vg <- seq(-2,2,1)
+#  vg <- seq(-2,2,1)
+# vg2 <- seq(-1,1,1)
 
-#vector demasiado grande
-#grilla <- expand.grid(vg,vg,vg,vg,vg,vg,vg,vg,vg,vg,vg,vg,vg,vg,vg)
+#grilla1 <- expand.grid(vg,vg,vg,vg,vg,vg, vg,vg,vg,vg,vg,vg,vg,vg,vg)
+
+#grilla2 <- expand.grid(vg2,vg2,vg2,vg2,vg2,vg2,vg2,vg2,vg2,vg2,vg2,vg2,vg2,vg2,vg2)
 ```
 
 
 
 ### Método de Newton 
 
-Dado el problema de la velocidad de convergencia del método anterior, parece una buena opción intentar solucionar el problema con el método de Newton. Este último acelera la convergencia del método del ascenso más rápido la incorporar información de la hessiana de la función en el algoritmo.
+Dado los problemas de la velocidad de convergencia y con el vector inicial del método anterior, parece una buena opción intentar utilizar el método de Newton. Este último acelera la convergencia del método del ascenso más rápido la incorporar información de la hessiana de la función en el algoritmo.
 
 ```{r, echo = FALSE}
 #metodo de newton
-
-
 
 newton<-function(FUN, x0,tol=1e-5,maxiter=1000,mostrar=TRUE,a_max=1,tau=0.5,maxiter_bt=10,c1=1e-4,c2=0.9,tau2=0.8,trace_bl=mostrar){
 	pn <- -solve(hessiana(FUN, x0))%*%gradiente(FUN, x0)
@@ -610,7 +612,7 @@ chequeo<-function(M){
 
 Para que en efecto el método de Newton converja a un máximo y no a un mínimo, tenemos que tener una hessiana definida negativa, así que por lo menos en el primer paso debemos que comprobar que la hessiana evaluada en el vector inicial cumpla esta condición. A modo de comprobar esto, utilizamos una función vista en el curso que calcula los vectores propios de la hessiana inicial, si todos ellos resultan negativos la matriz es definida negativa. 
 
-Al igual que con el método anterior, comencemos con el punto inicial de "control", el vector de estimaciones dadas por la función _glm()_. Primero hay que comprobar que la hessiana de la log-verosimilitud evaluada en dicho vector es definida negativa con la función antes mencionada, lo que nos da como resultado que en efecto es definida negativa. Entonces nos disponemos a utilizar el algoritmo de Newton.
+Al igual que con el método anterior, comencemos con el punto inicial de "control", el vector de estimaciones dadas por la función _glm()_. Primero hay que comprobar que la hessiana de la log-verosimilitud evaluada en dicho vector es definida negativa con la función antes mencionada, lo que nos da como resultado que en efecto lo es. Entonces nos disponemos a utilizar el algoritmo de Newton.
 
 ```{r}
 check1 <- chequeo(hessiana(log_ver, pars_ctrl))
@@ -626,6 +628,7 @@ Ahora intentemos utilizar como vector inicial el compuesto por ceros. La hessian
 ```{r, echo = FALSE}
 check2 <- chequeo(hessiana(log_ver, rep(0,15)))
 ```
+
 ```{r, echo=FALSE}
 newton2 <-newton(log_ver, rep(0,15))
 ```
@@ -633,7 +636,7 @@ newton2 <-newton(log_ver, rep(0,15))
 ```{r, echo=FALSE}
 xtable(cbind(pars_ctrl, as.numeric(newton2$x_max)), 
        digits = 9,
-       caption = "Comparación de las estimaciones de glm() y el método del ascenso más rápido")
+       caption = "Comparación de las estimaciones de glm() y el método de newton")
 ```
 \begin{table}[H]
 \centering
@@ -662,6 +665,9 @@ xtable(cbind(pars_ctrl, as.numeric(newton2$x_max)),
 \end{table}
 
 Podemos ver que este método convergió rápidamente, en tan solo tres iteraciones y necesitando hacer _forward-tracking_ solo una vez. En este caso el vector nulo parece ser una buena opción de vector inicial.
+
+
+
 
 ### Método de Broyden-Fletcher-Goldfarg-Shanno
 
@@ -709,7 +715,7 @@ bfgs<-function(FUN,x0,tol=1e-5,maxiter=1000,mostrar=TRUE,a_max=1,tau=0.5,maxiter
 # Conclusiones y futuros pasos
 
 
-#Bibliografía
+# Bibliografía
 
 
 
