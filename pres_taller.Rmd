@@ -1,0 +1,822 @@
+---
+title: "Estimación de un modelo lineal generalizado del salario mediante métodos numéricos"
+author: "Valentina Caldiroli, Maximiliano Saldaña"
+date: "Noviembre 2020"
+output: beamer_presentation
+colortheme: "beaver"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+
+```{r, include = FALSE}
+library(dplyr)
+library(readr)
+library(janitor)
+library(xtable)
+library(scales)
+```
+
+
+## Introducción
+
+* El objetivo planteado es estimar un modelo logístico mediante un método de máxima verosimilitud que aplique los métodos de optimización del curso y comparar el desempeño de nuestra estimación con el de las funciones base de R
+
+* Algoritmos de optimización empleados: el método del ascenso más rápido, el de Newton y el de Broyden-Fletcher-Goldfarg-Shanno. 
+
+* Se hace una comparación  términos de velocidad (cantidad de iteraciones que toman los algoritmos en converger) y precisión respecto a replicar el resultado del método de mínimos cuadrados iterativamente re-ponderados empleado por la función glm() para la estimación de modelos lineales generalizados.
+
+## Presentación del problema
+
+El modelo en cuestión es de la forma siguiente:
+
+$$P(Y_i = 1) = \frac{exp(x'_i\beta)}{1+exp(x'_i\beta)} = \pi_i = E(y_i)$$
+
+Donde se tiene que:
+$$y_i = sal\_med_i$$
+
+$$x'_i\beta = \beta_0 + \beta_1 female_i + \beta_2educ_i + \beta_3exper_i + \beta_4tenure_i + \beta_5northcen $$
+$$+ \beta_6south_i + \beta_7west_i + \beta_8reg.metro + \beta_9construc_i + \beta_{10}services_i$$
+$$+ \beta_{11}trade_i + \beta_{12}profocc_i + \beta_{13}clerocc_i + \beta_{14}servocc_i$$
+
+
+
+
+## Presentación del problema
+
+La función de unión (la que vincula $E(y_i)$ con $x'_i$) es:
+
+$$log_e \left[\frac{\pi_i}{1-\pi_i}\right] = exp(x'_i\beta) $$
+
+* El problema de estimar el vector de parámetros $\beta$ se traduce en un problema de optimización, ya que buscamos que dicho vector sea el que maximice la función de verosimilitud de $Y$. Como $Y_i$ son variables aleatorias Bernoulli independientes e idénticamente distribuidas $\forall \,\, i=1,\dots,n$ la función de verosimilitud es:
+
+
+## Presentación del problema
+
+$$L(\pi_1, \dots, \pi_n  | Y_1, \dots, Y_n) = \prod_{i=1}^n f_{Y_i}(y_i) = \prod_{i=1}^n \pi_i^{y_i}(1- \pi_i^{y_i})^{1-y_i}$$
+
+Resulta equivalente trabajar con el logaritmo de la verosimilitud, que es:
+
+$$log \,L(\pi_1, \dots, \pi_n  | Y_1, \dots, Y_n) = log \, \prod_{i=1}^n \pi_i^{y_i}(1- \pi_i^{y_i})^{1-y_i} $$
+
+$$= \sum_{i=1}^n \left[ Y_i log \left( \frac{\pi}{1+\pi} \right) \right] + \sum_{i=1}^n log(1-\pi_i)$$
+
+## Presentación del problema
+
+Teniendo en cuenta que:
+
+$$1-\pi_i = [1+exp(x'_i\beta)]^{-1}$$
+
+$$\frac{\pi}{1+\pi} = exp(x'_i\beta)$$
+
+$$log \, L(\beta|Y) = \sum_{i=1}^n  Y_i (x'_i\beta)   - \sum_{i=1}^n log(1+ exp(x'_i\beta)) $$
+
+Estimaremos el vector $\beta$ que maximice la función anterior.
+
+## Presentación de los datos
+
+```{r, results='hide', echo = FALSE, message =FALSE}
+#Arreglo inicial de los datos
+
+datos <- read_delim("wage1.txt", delim = "\t") %>% 
+  as.data.frame %>% 
+  clean_names() %>%
+  rename(salario = "wage", reg.metro = "smsa", log.salario= "lwage")
+
+as.numeric(sapply(datos, is.numeric))
+
+names(subset(datos, select=!as.numeric(sapply(datos, is.numeric))))
+
+sapply(subset(datos, select=!as.numeric(sapply(datos, is.numeric))), class)
+
+head(subset(datos, select=!as.numeric(sapply(datos, is.numeric))))
+
+datos <- datos %>%
+  mutate(salario = gsub(",", ".", salario), log.salario = gsub(",", ".", log.salario) ) %>% 
+  mutate_at(c("salario", "log.salario"), as.numeric)
+
+
+
+#datos con variables indicadoras categoricas y hacemos categorica la variable salario (usamos las categorias menor a 15 y mayor a 15 dolares por hora)
+datos <- datos %>% 
+  mutate(
+    region = as.factor(case_when(
+               northcen == 1 ~ "northcen",
+               south == 1 ~ "south",
+               west == 1 ~ "west",
+               northcen + south + west == 0 ~ "east"
+               )),
+    rama_act = as.factor(case_when(
+                 construc == 1 ~ "construc",
+                 trade == 1 ~ "trade",
+                 services == 1 ~ "services",
+                 construc + trade + services == 0 ~ "otros"
+               )),
+    ocupacion = as.factor(case_when(
+                 profocc == 1 ~ "profocc",
+                 clerocc == 1 ~ "clerocc",
+                 servocc == 1 ~ "servocc",
+                 profocc + clerocc + servocc == 0 ~ "otros",
+    )),
+    sal_med = ifelse(salario >= 5.896103 , 1, 0),
+    # sal_min = ifelse(salario >= 2.3 , 1, 0),
+          
+    educsq = educ^2
+  ) %>% 
+  dplyr::select(-profserv)
+```
+
+```{r , echo=FALSE, message=FALSE, results= FALSE}
+resumen_tot1 <- datos %>%
+                 summarise(region = "Todas",
+                           Cantidad=n(),
+                           `Mínimo`= min(salario),
+                           Media=mean(salario),
+                           `Máximo` = max(salario)) %>% 
+                  rename(`Región` = "region")
+
+resumen_tot2 <- datos %>%
+                 summarise(rama_act = "Todas",
+                           Cantidad=n(),
+                           `Mínimo`= min(salario),
+                           Media=mean(salario),
+                           `Máximo` = max(salario)) %>% 
+                 rename(`Rama de Actividad` = "rama_act")
+
+resumen_tot3 <- datos %>%
+                 summarise(ocupacion = "Todas",
+                           Cantidad=n(),
+                           `Mínimo`= min(salario),
+                           Media=mean(salario),
+                           `Máximo` = max(salario)) %>%
+                 rename(`Ocupación` = "ocupacion")
+                 
+resumen_reg <- datos %>%
+                group_by(region) %>%
+                summarise(Cantidad=n(),
+                          `Mínimo`= min(salario),
+                          Media=mean(salario),
+                          `Máximo` = max(salario)) %>%
+                arrange(forcats::fct_relevel(region,
+                                    "northcen",
+                                    "south",
+                                    "east",
+                                    "west")) %>% 
+                mutate(region = forcats::fct_recode(region,
+                                           "Norte"="northcen",
+                                           "Sur"="south",
+                                           "Este"="east",
+                                           "Oeste"="west")) %>% 
+                rename(`Región`="region")
+  
+resumen_rama_act <- datos %>% 
+                     group_by(rama_act) %>% 
+                     summarise(Cantidad=n(),
+                               `Mínimo`= min(salario),
+                               Media=mean(salario),
+                               `Máximo` = max(salario)) %>%
+                     arrange(forcats::fct_relevel(rama_act,
+                                         "construc",
+                                         "services",
+                                         "trade",
+                                         "otros")) %>% 
+                     mutate(rama_act = forcats::fct_recode(rama_act,
+                                                  "Construcción"="construc",
+                                                  "Servicios"="services",
+                                                  "Comercio"="trade",
+                                                  "Otros"="otros")) %>% 
+                     rename(`Rama de Actividad` = "rama_act") 
+
+resumen_ocupacion <- datos %>% 
+                      group_by(ocupacion) %>% 
+                      summarise(Cantidad=n(),
+                                `Mínimo`= min(salario),
+                                Media=mean(salario),
+                                `Máximo` = max(salario)) %>%
+                      arrange(forcats::fct_relevel(ocupacion,
+                                          "servocc",
+                                          "clerocc",
+                                          "profocc",
+                                          "otros")) %>% 
+                      mutate(ocupacion = forcats::fct_recode(ocupacion,
+                                                   "Servicio"="servocc",
+                                                   "Administrativos"="clerocc",
+                                                   "Profesional"="profocc",
+                                                   "Otros"="otros")) %>%
+                      rename(`Ocupación` = "ocupacion")
+                     
+
+
+  
+
+propsal <- datos %>% group_by(sal_med) %>% summarise(`Proporción` = n()/dim(datos)[1]) %>% mutate(sal_med = ifelse(sal_med == 1, "Sobre promedio", "Bajo el promedio"))
+
+propfem <- table(as.factor(datos$female))/dim(datos)[1]
+propwhite <- table(as.factor(datos$nonwhite))/dim(datos)[1]
+propmarr <- table(as.factor(datos$married))/dim(datos)[1]
+propmetro <- table(as.factor(datos$reg.metro))/dim(datos)[1]
+```
+
+* Se hará uso de una base de salarios de Estados Unidos del año 1976, extraída del libro _Introducción a la econometría_  (2009) de Jeffrey M. Wooldridge. 
+
+* La base cuenta con observaciones de 526 personas y con 22 variables.
+
+* La variable a ser explicada es una indicadora que vale 1 cuando el salario de la persona es mayor o igual del promedio (5,896103) y 0 cuando es menor -$sal\_med$-. 
+
+```{r results='asis', echo=FALSE}
+tabla1 <- xtable(propsal,caption = "Proporción de personas con salarios por debajo y sobre el promedio")
+```
+
+\begin{table}[ht]
+\centering
+\begin{tabular}{rlr}
+  \hline
+ & sal\_med & Proporción \\ 
+  \hline
+1 & Bajo el promedio & 0.62 \\ 
+  2 & Sobre promedio & 0.38 \\ 
+   \hline
+\end{tabular}
+\caption{Proporción de personas con salarios por debajo y sobre el promedio} 
+\end{table}
+## Presentación de los datos
+
+* Las variables explicativas (que se eligieron en base a lo ya trabajado en el curso Modelos Lineales) son: 
+
+  + Cuantitativas: educación -$educ$-, experiencia -$exper$- y antigüedad -$tenure$-
+
+
+  + Cualitativas: sexo de la persona -$female$-,  región (dividida en Norte -$northcen$-, Sur -$south$-, Oeste -$west$- y Este -categoría de referencia-), si vive en una región metropolitana -$reg.metro$-, rama de actividad (dividida en Construcción -$cosntruc$-, Comercio -$trade$-, Servicios -$services$- y Otros -categoría de referencia-) y Ocupación (dividida en Profesional -$profocc$-, Administrativos -$clerocc$-, Servicios -$servocc$- y Otros -categoría de referencia-).
+  
+  
+## Estimando mediante las funciones base
+
+```{r, echo = FALSE}
+#modelo logit
+
+modelo_ctrl <- glm(sal_med ~ female + educ + exper + tenure + northcen + south + west + reg.metro + construc + services + trade + profocc + clerocc + servocc, family = binomial (link = "logit") ,data = datos)
+
+
+# cuadrovars <- xtable(as.data.frame(summary(modelo_ctrl)$coefficients[,1]), digits = 8)
+```
+
+```{r, echo = FALSE}
+#funcion a maximizar
+
+X <- dplyr::select(datos,female, educ, exper, tenure, northcen, south, west, reg.metro, construc, services, trade, profocc, clerocc, servocc)
+
+X <- cbind(rep(1, dim(X)[1]), X)
+
+log_ver <- function(b){
+  #b tiene que ser un vector k+1 = 14 + 1 dimensional
+  
+  lv <- sum((as.numeric(datos$sal_med))*(as.matrix(X)%*%b)) - sum(log(1+exp(as.matrix(X)%*%b))) 
+  
+  return(lv)
+}
+
+```
+
+```{r}
+max_ctrl <- log_ver(summary(modelo_ctrl)$coefficients[,1])
+```
+
+- Inicialmente para tener como referencia y para comparar, estimaremos el modelo mediante la función de R _glm()_ del paquete base _stats_, la cual hace uso del método de estimación por mínimos cuadrados iterativamente re-ponderados (IWLS).
+
+- Evaluando los coeficientes resultantes en la función de verosimilud el valor del máximo obtenido es -232,3441.
+
+- Para emplear los métodos numéricos de optimización antes mencionados haremos uso de las funciones para aplicarlos vistas en el curso, las que fue necesario modificar para que fuera posible emplear aproximaciones numéricas del gradiente y la hessiana de la log-verosimilitud en vez de ser estas calculadas manualmente. 
+
+## Estimación mediante el método del ascenso más rápido
+
+```{r, echo = FALSE}
+##EXTRAIDO DE LO DE CLASE###
+
+#para calcular numericamente el gradiente 
+gradiente <- function(FUN, x0){
+  
+  f0 <- FUN(x0)
+  h <- sqrt(.Machine$double.eps)
+  k <- length(x0)
+  dfx <- rep(0, k)
+  
+  for(i in 1:k){
+    xi <- x0
+    xi[i] <- xi[i] + h
+    dfx[i] <- (FUN(xi)-f0)/h
+  }
+  
+  return(dfx)
+}
+
+#hessiana
+hessiana <- function(FUN, x0){
+  
+  f0 <- FUN(x0)
+  h <- (.Machine$double.eps)^(1/3)
+  k <- length(x0)
+  Hfx <- matrix(0,k,k)
+  
+  for(i in 1:k){
+    for(j in 1:k){
+    xi <- x0
+    xj <- x0
+    xij <- x0
+      
+    xi[i] <- xi[i] + h
+    xj[j] <- xj[j] + h
+    
+    xij[i] <- xij[i] + h
+    xij[j] <- xij[j] + h
+
+    Hfx[i,j] <- (FUN(xij)-FUN(xi)-FUN(xj)+f0)/(h^2)
+    }
+  }
+  
+  return(Hfx)
+}
+
+
+
+
+#busqueda lineal
+
+blineal<-function(FUN,xn,pn,a_max=1,tau=0.5,maxiter_bt=10,c1=1e-4,c2=0.9,tau2=0.8,mostrar_bl=TRUE){
+	phi<-function(x,a,p) FUN(x+a*p)
+	phi0<-phi(xn,0,pn)
+	alfa<-a_max
+	phia<-phi(xn,alfa,pn)
+
+	# condicion de ascenso suficiente
+	iter_bt<-1
+	armijo<-phi0+c1*alfa*sum(pn^2)
+	while(phia<=armijo & iter_bt<maxiter_bt){
+		alfa<-alfa*tau
+		armijo<-phi0+alfa*c1*sum(pn^2)
+		phia<-phi(xn,alfa,pn)
+		iter_bt<-iter_bt+1
+	}
+	
+  #condicion de curvatura
+	iter_ft<-0
+	while(sum(gradiente(FUN, xn+alfa*pn)*pn) > c2*sum(pn^2)){
+		if(iter_ft==0 & mostrar_bl==TRUE) cat('Realizando forward-tracking','\n')
+		iter_ft<-iter_ft+1
+		alfa_old<-alfa/tau
+		dif<-alfa_old - alfa
+		alfa<-alfa + dif*(1-tau^iter_ft)
+	}
+
+	if(iter_bt==maxiter_bt & mostrar_bl==TRUE) cat('Fallo la busqueda lineal','\n')
+	salida<-list(alfa=alfa,iter_bt=iter_bt,iter_ft=iter_ft)
+	return(salida)
+}
+
+
+```
+
+
+
+```{r, echo = FALSE}
+#metodo ascenso mas rapido
+
+ascenso <- function(FUN,x0,tol=1e-5,maxiter=1000,mostrar=TRUE,a_max=1,tau=0.5,maxiter_bt=10,c1=1e-4,c2=0.9,tau2=0.8,trace_bl=mostrar){
+	pn <- gradiente(FUN, x0)
+	alfa<-blineal(FUN,x0,pn,a_max=a_max,tau=tau,maxiter_bt=maxiter_bt,c1=c1,c2=c2,tau2=tau2,mostrar_bl=trace_bl)
+	an<-alfa$alfa
+	x1<-x0+an*pn
+	iter<-1
+	cambio<-sum(pn^2)
+
+	while(cambio>tol & iter<maxiter){
+		x0<-x1
+		pn<-gradiente(FUN, x0)
+		alfa<-blineal(FUN,x0,pn,a_max=a_max,tau=tau,maxiter_bt=maxiter_bt,c1=c1,c2=c2,tau2=tau2,mostrar_bl=trace_bl)
+		an<-alfa$alfa
+		x1<-x0+an*pn
+		if(mostrar==TRUE) cat(paste('x',iter,sep=''),x1,'\n')
+		iter<-iter+1
+		cambio<-sum(pn^2)
+	}
+	if(iter==maxiter & mostrar==TRUE) cat('No se alcanzo convergencia','\n')
+
+	salida<-list(x_max=x1,fx_max=FUN(x1),iter=iter)
+	return(salida)
+}
+```
+
+- Para comenzar con este método y verificar que las funciones se desempeñan correctamente, probamos suministrándole como valores iniciales los estimados mediante la función _glm()_. A continuación, se presenta un cuadro comparando los valores de ambas estimaciones:
+
+```{r, echo = FALSE, results=FALSE}
+pars_ctrl <- c(summary(modelo_ctrl)$coefficients[,1])
+
+asce1 <- ascenso(FUN = log_ver, x0 = pars_ctrl)
+
+
+xtable(cbind(pars_ctrl, as.numeric(asce1$x_max)), 
+       digits = 9,
+       caption = "Comparación  glm() y ascenso más rápido")
+
+#max(pars_ctrl- as.numeric(asce1$x_max))
+```
+
+## Estimación mediante el método del ascenso más rápido
+
+
+\begin{table}[H]
+\centering
+\begin{tabular}{rrr}
+  \hline
+ & glm() & Ascenso \\ 
+  \hline
+(Intercept) & -4.442367437 & -4.442367437 \\ 
+  female & -1.194755469 & -1.194755469 \\ 
+  educ & 0.277912495 & 0.277912308 \\ 
+  exper & 0.007568890 & 0.007568376 \\ 
+  tenure & 0.083587709 & 0.083587627 \\ 
+  northcen & -0.012727340 & -0.012727340 \\ 
+  south & 0.035935951 & 0.035935951 \\ 
+  west & 0.688820844 & 0.688820844 \\ 
+  reg.metro & 0.745975971 & 0.745975971 \\ 
+  construc & -0.363769611 & -0.363769611 \\ 
+  services & -0.493415175 & -0.493415175 \\ 
+  trade & -1.429567604 & -1.429567604 \\ 
+  profocc & 0.854540015 & 0.854540015 \\ 
+  clerocc & -0.585495085 & -0.585495085 \\ 
+  servocc & -1.209387935 & -1.209387935 \\ 
+   \hline
+\end{tabular}
+\caption{Comparación de glm() y ascenso más rápido} 
+\end{table}
+
+
+## Estimación mediante el método del ascenso más rápido
+
+- Se puede apreciar, como era de esperarse, la similitud entre ambas estimaciones, difiriendo a lo sumo recién a partir del sexto valor después de la coma (se fijó una tolerancia de $10^{-5}$). Toma solo una iteración tener este resultado. 
+
+- Reduciendo la tolerancia la diferencia entre las estimaciones por los dos métodos se hace menor, pero toma más iteraciones y es necesario permitir más iteraciones de la búsqueda lineal, además de que se necesita hacer _forward-tracking_ en varios pasos. 
+
+- El valor del máximo obtenido es -232,3441, lo que lo hace equivalente al de la función de control. 
+
+- La elección del vector inicial es un problema, tenemos que partir de un punto inicial "cercano" al que maximiza la función para que converja rápidamente. 
+
+
+
+## Estimación mediante el método del ascenso más rápido
+
+- Se puede utilizar una grilla de valores, pero el problema con este camino es de caracter práctico.
+
+- Incluso considerando un número reducido de valores para la grilla (por ejemplo: -2, -1, 0, 1 y 2), el espacio que ocuparía en la memoria es demasiado grande debido al número de coeficientes a estimar.
+
+- Sumándose a esto el elevado tiempo que implicaría evaluar suficientes valores iniciales distintos para encontrar los que hagan que el método del ascenso más rápido (o cualquier otro) converja. 
+
+- Reduciendo aún más la grilla (los valores posibles son -1, 0 y 1) el primero problema se soluciona, pero sigue presente el segundo.
+
+## Estimación mediante el método del ascenso más rápido
+
+- Probemos  ahora con un vector de valores iniciales ($x_0$) compuesto solo de ceros. Nos lleva a que el algoritmo no converja a una solución, dadas las 1000 iteraciones asignadas y presente varios fallos en la búsqueda lineal (el número de iteraciones -10- resultaba muy reducido para encontrar una longitud del paso del algoritmo apropiada). 
+
+- Incluso asignando 5000 iteraciones el resultado continúa siendo el mismo. Esto nos lleva a pensar que se necesita un mejor punto de inicio para que el algoritmo converja más velozmente, es decir, uno más cercano al verdadero valor que máximiza la log-verosimilitud.
+
+
+## Estimación mediante el método del ascenso más rápido
+
+- Alternativamente se puede intentar llegar a una solución utilizando estimaciones iniciales dadas por el método de mínimos cuadrados ordinarios (MCO) y considerando el salario en vez de la indicadora utilizada. 
+
+- Las estimaciones pueden dar una idea aproximada de la relación entre nuestra variable dependiente y sus regresores. 
+
+- Pero utilizar las estimaciones por MCO no nos lleva a que se alcance la convergencia del algoritmo, incluso permitiéndole al algoritmo utilizar 5000 iteraciones. 
+
+- Aunque puede que se encuentre la solución con un mayor número de iteraciones, conviene encontrar un punto de arranque que permita llegar a la convergencia en un número menor de iteraciones y por lo tanto en menor tiempo.
+
+## Estimación mediante el método de Newton 
+
+- Dado los problemas de la velocidad de convergencia y con el vector inicial del método anterior, parece una buena opción intentar utilizar el método de Newton. 
+
+- Este algoritmo acelera la convergencia del método del ascenso más rápido al incorporar información de la hessiana de la función en el algoritmo.
+
+```{r, echo = FALSE}
+mod_mco <- lm(salario ~ female + educ + exper + tenure + northcen + south + west + reg.metro + construc + services + trade + profocc + clerocc + servocc, data = datos)
+
+summMCO <- summary(mod_mco)$coefficients[,1]
+
+#print.xtable(xtable(t(summMCO)), include.rownames=FALSE)
+```
+
+
+```{r, echo = FALSE}
+#metodo de newton
+
+newton<-function(FUN, x0,tol=1e-5,maxiter=1000,mostrar=TRUE,a_max=1,tau=0.5,maxiter_bt=10,c1=1e-4,c2=0.9,tau2=0.8,trace_bl=mostrar){
+	pn <- -solve(hessiana(FUN, x0))%*%gradiente(FUN, x0)
+	alfa<-blineal(FUN, x0,pn,a_max=a_max,tau=tau,maxiter_bt=maxiter_bt,c1=c1,c2=c2,tau2=tau2,mostrar_bl=trace_bl)
+	an<-alfa$alfa
+	x1<-x0+an*pn
+	iter<-1
+	cambio<-sum(pn^2)
+
+	while(cambio>tol & iter<maxiter){
+		x0<-x1
+		pn<- -solve(hessiana(FUN, x0))%*%gradiente(FUN, x0)
+		alfa<-blineal(FUN,x0,pn,a_max=a_max,tau=tau,maxiter_bt=maxiter_bt,c1=c1,c2=c2,tau2=tau2,mostrar_bl=trace_bl)
+		an<-alfa$alfa
+		x1<-x0+an*pn
+		if(mostrar==TRUE) cat(paste('x',iter,sep=''),x1,'\n')
+		iter<-iter+1
+		cambio<-sum(pn^2)
+	}
+	if(iter==maxiter & mostrar==TRUE) cat('No se alcanzo convergencia','\n')
+
+	salida<-list(x_max=x1,fx_max=FUN(x1),iter=iter)
+	return(salida)
+}
+
+
+chequeo<-function(M){
+	lam<-eigen(M)$values
+	if(all(lam>0)) cat('M es definida positiva','\n')
+	if(all(lam<0)) cat('M es definida negativa','\n')
+	if(any(lam>0) & any(lam<0)) cat('M es indefinida','\n')
+	return(lam)
+}
+```
+
+- Para que en efecto el método de Newton converja a un máximo y no a un mínimo, tenemos que tener una hessiana definida negativa. 
+
+- A modo de comprobar esto, utilizamos una función vista en el curso que calcula los vectores propios de la hessiana inicial, si todos ellos resultan negativos la matriz es definida negativa. 
+
+- Al igual que con el método anterior, comencemos con el punto inicial de "control", el vector de estimaciones dadas por la función _glm()_. 
+
+```{r, results= FALSE}
+check1 <- chequeo(hessiana(log_ver, pars_ctrl))
+```
+
+```{r, results= FALSE}
+newton1 <-newton(log_ver, pars_ctrl)
+```
+
+## Estimación mediante el método de Newton 
+
+- Análogamente a lo que ocurrió con el método del ascenso más rápido, el de Newton converge en este caso en una iteración a un vector de coeficientes muy similares y un máximo equivalente a los obtenidos con la función _glm()_. 
+
+- Cabe destacar que la búsqueda lineal necesito hacer _forward-tracking_ y se da un fallo en la búsqueda lineal.
+
+- Ahora intentemos utilizar como vectores iniciales el compuesto por ceros y el de las estimaciones MCO. La hessiana de la log-verosimilitud resulta definida negativa al evaluarla en ambos vectores, por lo que en un principio pueden ser candidatos.
+
+```{r, echo = FALSE, results= FALSE}
+check2 <- chequeo(hessiana(log_ver, rep(0,15)))
+check3 <- chequeo(hessiana(log_ver, summMCO))
+```
+
+```{r, echo=FALSE, results= FALSE}
+newton2 <-newton(log_ver, rep(0,15))
+
+newton3 <- newton(log_ver, summMCO)
+```
+
+## Estimación mediante el método de Newton 
+
+```{r, echo=FALSE}
+tabla2 <- xtable(cbind(pars_ctrl, as.numeric(newton2$x_max)), 
+       digits = 9,
+       caption = "Comparación de las estimaciones de glm() y el método de newton")
+
+tabla3 <- xtable(cbind(pars_ctrl, as.numeric(newton3$x_max)), 
+       digits = 9,
+       caption = "Comparación de las estimaciones de glm() y el método de newton")
+```
+
+\begin{table}[ht]
+\centering
+\begin{tabular}{rrr}
+  \hline
+ Variables & glm() & Vector de 0's \\ 
+  \hline
+(Intercept) & -4.442367437 & -4.442363082 \\ 
+  female & -1.194755469 & -1.194755231 \\ 
+  educ & 0.277912495 & 0.277912242 \\ 
+  exper & 0.007568890 & 0.007568853 \\ 
+  tenure & 0.083587709 & 0.083587710 \\ 
+  northcen & -0.012727340 & -0.012727760 \\ 
+  south & 0.035935951 & 0.035935444 \\ 
+  west & 0.688820844 & 0.688820173 \\ 
+  reg.metro & 0.745975971 & 0.745975951 \\ 
+  construc & -0.363769611 & -0.363771043 \\ 
+  services & -0.493415175 & -0.493415066 \\ 
+  trade & -1.429567604 & -1.429567877 \\ 
+  profocc & 0.854540015 & 0.854540092 \\ 
+  clerocc & -0.585495085 & -0.585495421 \\ 
+  servocc & -1.209387935 & -1.209388297 \\ 
+   \hline
+\end{tabular}
+\caption{Comparación glm() y el método de newton} 
+\end{table}
+
+
+## Estimación mediante el método de Newton
+
+\begin{table}[ht]
+\centering
+\begin{tabular}{rrr}
+  \hline
+ Variables & glm() & $\hat{\beta}_{MCO}$ \\ 
+  \hline
+(Intercept) & -4.442367437 & -4.442361732 \\ 
+  female & -1.194755469 & -1.194755497 \\ 
+  educ & 0.277912495 & 0.277912116 \\ 
+  exper & 0.007568890 & 0.007568843 \\ 
+  tenure & 0.083587709 & 0.083587707 \\ 
+  northcen & -0.012727340 & -0.012727487 \\ 
+  south & 0.035935951 & 0.035935708 \\ 
+  west & 0.688820844 & 0.688820410 \\ 
+  reg.metro & 0.745975971 & 0.745975895 \\ 
+  construc & -0.363769611 & -0.363770666 \\ 
+  services & -0.493415175 & -0.493415144 \\ 
+  trade & -1.429567604 & -1.429567922 \\ 
+  profocc & 0.854540015 & 0.854540730 \\ 
+  clerocc & -0.585495085 & -0.585494736 \\ 
+  servocc & -1.209387935 & -1.209387806 \\ 
+   \hline
+\end{tabular}
+\caption{Comparación glm() y el método de newton} 
+\end{table}
+
+## Estimación mediante el método de Newton
+
+- Podemos ver que este método convergió rápidamente, en tan solo cuatro iteraciones en el caso del vector de ceros y en siete usando las estimaciones MCO.
+
+- Se necesito hacer _forward-tracking_ solo una vez en ambos casos. 
+
+- En este caso el vector nulo parece ser una buena opción de punto de arranque si no se cuenta con información sobre los coeficientes a estimar, incluso mejor que utilizar las estimaciones MCO ya que nos ahorramos iteraciones.
+
+## Estimación mediante el método de Broyden-Fletcher-Goldfarg-Shanno.
+
+
+```{r}
+#metodo bfgs
+
+bfgs<-function(FUN,x0,tol=1e-5,maxiter=1000,mostrar=TRUE,a_max=1,tau=0.5,maxiter_bt=10,c1=1e-4,c2=0.9,tau2=0.8,trace_bl=mostrar){
+	H<- -diag(length(x0))
+	pn <- df0 <- -H%*%gradiente(FUN, x0)
+	alfa<-blineal(FUN,x0,pn,a_max=a_max,tau=tau,maxiter_bt=maxiter_bt,c1=c1,c2=c2,tau2=tau2,mostrar_bl=trace_bl)
+	an<-alfa$alfa
+	x1<-x0+an*pn
+	df1<-gradiente(FUN, x1)
+	iter<-1
+	cambio<-sum(pn^2)
+	Id<--H
+
+	while(cambio>tol & iter<maxiter){
+		sn<-x1-x0
+		yn<-df1-df0
+		rn<-1/sum(yn*sn)
+		H<-(Id-rn*sn%*%t(yn))%*%H%*%(Id-rn*yn%*%t(sn))+rn*sn%*%t(sn)
+		x0<-x1
+		df0<-df1
+		pn<--H%*%df1
+		alfa<-blineal(FUN,x0,pn,a_max=a_max,tau=tau,maxiter_bt=maxiter_bt,c1=c1,c2=c2,tau2=tau2,mostrar_bl=trace_bl)
+		an<-alfa$alfa
+		x1<-x0+an*pn
+		df1<-gradiente(FUN, x1)
+		if(mostrar==TRUE) cat(paste('x',iter,sep=''),x1,'\n')
+		iter<-iter+1
+		cambio<-sum(pn^2)
+	}
+	if(iter==maxiter & mostrar==TRUE) cat('No se alcanzo convergencia','\n')
+
+	salida<-list(x_max=x1,fx_max=FUN(x1),iter=iter)
+	return(salida)
+}
+```
+
+- Al ahorrarse la evaluación de la hessiana, estos métodos pueden resultar más veloces que el de Newton, aunque esto también dependerá del vector inicial empleado. 
+
+- El método de Newton tenderá a tomar menos iteraciones si se comienza cerca de la solución. 
+
+- Resulta necesario una evaluación inicial de la hessiana, que se puede elegir como el opuesto de la matriz identidad cuya dimensión es la cantidad de variables de la función a optimizar, o emplear una estimaciones de la hessiana en $x_0$. 
+
+
+## Estimación mediante el método de Broyden-Fletcher-Goldfarg-Shanno.
+
+- Se quiso también hacer una comparación con el resultado obtenido con el algoritmo bfgs de la función _optim()_ de la biblioteca _stats_,  pero tuvo problemas al aproximar la hessiana. 
+
+- Continuamos presentando las estimaciones resultantes de utilizar como vector inicial el nulo y el de las estimaciones MCO. 
+
+```{r, results=FALSE}
+bfgs1 <- bfgs(FUN = log_ver,x0 = pars_ctrl)
+
+# log_ver_op <- function(b){
+#   #b tiene que ser un vector k+1 = 14 + 1 dimensional
+#   
+#   lv <- -sum((as.numeric(datos$sal_med))*(as.matrix(X)%*%b)) - sum(log(1+exp(as.matrix(X)%*%b))) 
+#   
+#   return(lv)
+# }
+
+# optim no puede encontrar el maximo
+# bfgsr <- optim(par = rep(0,15), fn = log_ver_op, method = "BFGS", control = list(trace = TRUE))
+
+bfgs2 <- bfgs(FUN = log_ver,x0 = rep(0,15))
+
+bfgs3 <- bfgs(FUN = log_ver,x0 = summMCO, maxiter_bt = 20)
+```
+
+```{r}
+bfgstab <- xtable(cbind(pars_ctrl, as.numeric(bfgs2$x_max)), 
+            digits = 9,
+             caption = "Comparación glm() y el método BFGS")
+
+bfgstab2 <- xtable(cbind(pars_ctrl, as.numeric(bfgs3$x_max)), 
+            digits = 9,
+             caption = "Comparación glm() y el método BFGS")
+```
+
+## Estimación mediante el método de Broyden-Fletcher-Goldfarg-Shanno.
+
+\begin{table}[ht]
+\centering
+\begin{tabular}{rrr}
+  \hline
+ Variable & glm() & Vector de 0's\\ 
+  \hline
+(Intercept) & -4.442367437 & -4.441287082 \\ 
+  female & -1.194755469 & -1.194356801 \\ 
+  educ & 0.277912495 & 0.277846624 \\ 
+  exper & 0.007568890 & 0.007565239 \\ 
+  tenure & 0.083587709 & 0.083585123 \\ 
+  northcen & -0.012727340 & -0.012964024 \\ 
+  south & 0.035935951 & 0.035914771 \\ 
+  west & 0.688820844 & 0.688620025 \\ 
+  reg.metro & 0.745975971 & 0.745850209 \\ 
+  construc & -0.363769611 & -0.363854741 \\ 
+  services & -0.493415175 & -0.493346501 \\ 
+  trade & -1.429567604 & -1.429542202 \\ 
+  profocc & 0.854540015 & 0.854472462 \\ 
+  clerocc & -0.585495085 & -0.585483998 \\ 
+  servocc & -1.209387935 & -1.209298455 \\ 
+   \hline
+\end{tabular}
+\caption{Comparación glm() y el método BFGS} 
+\end{table}
+
+## Estimación mediante el método de Broyden-Fletcher-Goldfarg-Shanno.
+
+\begin{table}[ht]
+\centering
+\begin{tabular}{rrr}
+  \hline
+ Variables & glm() & $\hat{\beta}_{MCO}$ \\ 
+  \hline
+(Intercept) & -4.442367437 & -4.442571372 \\ 
+  female & -1.194755469 & -1.194609027 \\ 
+  educ & 0.277912495 & 0.277942647 \\ 
+  exper & 0.007568890 & 0.007576988 \\ 
+  tenure & 0.083587709 & 0.083582161 \\ 
+  northcen & -0.012727340 & -0.012858416 \\ 
+  south & 0.035935951 & 0.035839134 \\ 
+  west & 0.688820844 & 0.688680786 \\ 
+  reg.metro & 0.745975971 & 0.745871069 \\ 
+  construc & -0.363769611 & -0.363864731 \\ 
+  services & -0.493415175 & -0.493359194 \\ 
+  trade & -1.429567604 & -1.429527372 \\ 
+  profocc & 0.854540015 & 0.854280808 \\ 
+  clerocc & -0.585495085 & -0.585675743 \\ 
+  servocc & -1.209387935 & -1.209619458 \\ 
+   \hline
+\end{tabular}
+\caption{Comparación glm() y el método BFGS} 
+\end{table}
+
+## Estimación mediante el método de Broyden-Fletcher-Goldfarg-Shanno.
+
+- Si bien se llega al mismo máximo que en el método anterior, el desempeño de este método resultó peor que el de Newton en cuanto a la cantidad de iteraciones que toma para converger y la precisión de las estimaciones respecto a _glm()_. 
+
+- En cuanto a lo primero, se puede deber a que se partió de un vector lo suficientemente similar al que maximiza la log-verosimilitud para que el método de Newton fuera más veloz que el BFGS. 
+
+- Lo segundo puede ser consecuencia de que al aproximarse y no evaluarse la hessiana se pierde precisión, esto se puede solucionar reduciendo la tolerancia, aunque la consecuencia de esto es un aumento en las iteraciones necesarias para la convergencia.  
+
+## Resumen de los resultados
+
+\begin{table}[H]
+\centering
+\begin{tabular}{rllll}
+  \hline
+ & Método & Iter. & f(x\_max) & cif. = a glm() \\ 
+  \hline
+1 & Ascenso más rápido & No converge & No converge & No converge \\ 
+  2 & Newton (vector 0's) & 4 & -232.344056&  5   \\ 
+  3 & Newton (beta\_mco) & 7 & -232.344056 & 5  \\ 
+  4 & BFGS (vector 0's) & 35 & -232.344059 & 2  \\ 
+  5 & BFGS (beta\_mco) & 24 & -232.344057 & 2 \\ 
+   \hline
+\end{tabular}
+\caption{Resumen de resultados de los distintos métodos.} 
+\end{table}
+
+## Pasos futuros
+
+- A futuro se podría profundizar en métodos para la elección de vectores iniciales, como las mencionadas grillas de valores, ya que si bien en este caso se tenía una idea de donde partir para enfrentar el problema esto no va a ocurrir en la mayoría de aplicaciones. 
+
+- La comparación con otros métodos de optimización adicionales también sería otro punto para expandir sobre lo trabajado. 
