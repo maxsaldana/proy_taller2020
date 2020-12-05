@@ -544,17 +544,21 @@ ascenso <- function(FUN,x0,tol=1e-5,maxiter=1000,mostrar=TRUE,a_max=1,tau=0.5,ma
 	return(salida)
 }
 ```
-Para comenzar con este método y verificar que las funciones se desempeñan correctamente, probamos suministrándole como valores iniciales los estimados mediante la función _glm()_. A continuación, se presenta un cuadro comparando los valores de ambas estimaciones:
+Para comenzar con este método y verificar que las funciones se desempeñan correctamente, probamos suministrándole como valores iniciales los estimados mediante la función _glm()_. A continuación, se presenta un cuadro de los errores relativos de las estimaciones mediante el método del ascenso más rápido respecto a las de la función _glm()_ y la varianza estimada de dichas estimaciones.
 
 ```{r, echo = FALSE}
 pars_ctrl <- c(summary(modelo_ctrl)$coefficients[,1])
-
 asce1 <- ascenso(FUN = log_ver, x0 = pars_ctrl)
 
+pi_gorro1 = as.numeric(1/(1+exp(-as.matrix(X)%*%asce1$x_max)))
+w_gorro1 <- as.matrix(diag(pi_gorro1*(1-pi_gorro1), nrow = length(pi_gorro1*(1-pi_gorro1))))
+var_gorro1 <- t(as.matrix(X))%*%w_gorro1%*%as.matrix(X)
 
-xtable(cbind(pars_ctrl, as.numeric(asce1$x_max)), 
-       digits = 9,
-       caption = "Comparación de las estimaciones de glm() y el método del ascenso más rápido")
+e_rel_asce <- abs(pars_ctrl - asce1$x_max)/abs(pars_ctrl) 
+
+xtable(as.data.frame(cbind(e_rel_asce,diag(var_gorro1))), 
+       digits = 4,
+       caption = "Error relativo respecto a glm() y varianza de ascenso más rápido")
 
 #max(pars_ctrl- as.numeric(asce1$x_max))
 ```
@@ -563,32 +567,33 @@ xtable(cbind(pars_ctrl, as.numeric(asce1$x_max)),
 \centering
 \begin{tabular}{rrr}
   \hline
- & glm() & Ascenso \\ 
+ Variable & Error relativo & $\hat{V(\hat{\beta)}}$ \\ 
   \hline
-(Intercept) & -4.442367437 & -4.442367437 \\ 
-  female & -1.194755469 & -1.194755469 \\ 
-  educ & 0.277912495 & 0.277912308 \\ 
-  exper & 0.007568890 & 0.007568376 \\ 
-  tenure & 0.083587709 & 0.083587627 \\ 
-  northcen & -0.012727340 & -0.012727340 \\ 
-  south & 0.035935951 & 0.035935951 \\ 
-  west & 0.688820844 & 0.688820844 \\ 
-  reg.metro & 0.745975971 & 0.745975971 \\ 
-  construc & -0.363769611 & -0.363769611 \\ 
-  services & -0.493415175 & -0.493415175 \\ 
-  trade & -1.429567604 & -1.429567604 \\ 
-  profocc & 0.854540015 & 0.854540015 \\ 
-  clerocc & -0.585495085 & -0.585495085 \\ 
-  servocc & -1.209387935 & -1.209387935 \\ 
+(Intercept) & 0.0000 & 75.1230 \\ 
+  female & 0.0000 & 31.4699 \\ 
+  educ & 0.0000 & 12750.9338 \\ 
+  exper & 0.0001 & 35406.2091 \\ 
+  tenure & 0.0000 & 5486.2826 \\ 
+  northcen & 0.0000 & 18.6919 \\ 
+  south & 0.0000 & 26.7263 \\ 
+  west & 0.0000 & 13.5322 \\ 
+  reg.metro & 0.0000 & 56.5380 \\ 
+  construc & 0.0000 & 4.0743 \\ 
+  services & 0.0000 & 7.0713 \\ 
+  trade & 0.0000 & 18.6895 \\ 
+  profocc & 0.0000 & 30.5498 \\ 
+  clerocc & 0.0000 & 10.9593 \\ 
+  servocc & 0.0000 & 5.4530 \\ 
    \hline
 \end{tabular}
-\caption{Comparación de las estimaciones de glm() y el método del ascenso más rápido} 
+\caption{Error relativo respecto a glm() y varianza de ascenso más rápido} 
 \end{table}
 
 
-Se puede apreciar, como era de esperarse, la similitud entre ambas estimaciones, difiriendo a lo sumo recién a partir del sexto valor después de la coma (se fijó una tolerancia de $10^{-5}$). Toma solo una iteración tener este resultado. Reduciendo la tolerancia la diferencia entre las estimaciones por los dos métodos se hace menor, pero toma más iteraciones y es necesario permitir más iteraciones de la búsqueda lineal, además de que se necesita hacer _forward-tracking_ en varios pasos. Esto último quiere decir que fue necesario agrandar la longitud del paso de la búsqueda para que se cumpliera la condición de la curvatura. El valor del máximo obtenido es -232,3441, lo que lo hace equivalente al de la función de control. 
 
-Debe tenerse en cuenta que este y el resto de los métodos presentados cuando convergen lo hacen a _un_ máximo, lo que no significa que converjan al máximo global. Esto es una limitación ya que usualmente no tendremos la certeza de que no haya un vector que haga aun mayor el valor de la función a maximizar. En el caso que se pueda, una manera subsanar esto es probando distintos puntos de arranque de una grilla y ver a donde convergen, si lo hacen a un mismo punto es evidencia a favor de que se está en presencia de un máximo. El problema con este camino es de caracter práctico; incluso considerando un número reducido de valores para la grilla (por ejemplo: -2, -1, 0, 1 y 2) el espacio que ocuparía en la memoria es demasiado grande debido al número de coeficientes a estimar; sumándose a esto el elevado tiempo que implicaría evaluar suficientes valores iniciales distintos para encontrar los que hagan que el método del ascenso más rápido (o cualquier otro) converja. Reduciendo aún más la grilla (los valores posibles son -1, 0 y 1) el primero problema se soluciona, pero sigue presente el segundo.
+Se puede apreciar, como era de esperarse, la similitud entre ambas estimaciones, siendo el error relativo de las estimaciones de menos de 0,0001. Toma solo una iteración tener este resultado. Las estimaciones de los coeficientes de las variables _educ_, _exper_ y _tenure_ presentan las mayores varianzas estimadas. Reduciendo la tolerancia la diferencia entre las estimaciones por los dos métodos se hace menor, pero toma más iteraciones y es necesario permitir más iteraciones de la búsqueda lineal, además de que se necesita hacer _forward-tracking_ en varios pasos. Esto último quiere decir que fue necesario agrandar la longitud del paso de la búsqueda para que se cumpliera la condición de la curvatura. El valor del máximo obtenido es -232,3441, lo que lo hace equivalente al de la función de control. 
+
+Debe tenerse en cuenta que este y el resto de los métodos presentados cuando convergen lo hacen a _un_ máximo, lo que no significa que converjan al máximo global. Esto es una limitación ya que usualmente no tendremos la certeza de que no haya un vector que haga aun mayor el valor de la función a maximizar. En el caso que se pueda, una manera subsanar esto es probando distintos puntos de arranque de una grilla y ver a donde convergen, si lo hacen a un mismo punto es evidencia a favor de que se está en presencia de un máximo. El problema con este camino es de caracter práctico; incluso considerando un número reducido de valores para la grilla (por ejemplo: -2, -1, 0, 1 y 2) el espacio que ocuparía en la memoria es demasiado grande debido al número de coeficientes a estimar; sumándose a esto el elevado tiempo que implicaría evaluar suficientes valores iniciales distintos para encontrar los que hagan que el método del ascenso más rápido (o cualquier otro) converja. Reduciendo aún más la grilla (los valores posibles son -1, 0 y 1) el primero problema se soluciona, pero sigue presente el segundo. Otra alternativa para aplicar la grilla podría ser generarla de manera aleatoria y evaluar la función a maximizar en varios de sus conjuntos de valores, quedándonos con aquel que haga mayor el valor de la función.
 
 ```{r, echo = FALSE}
 
@@ -703,39 +708,59 @@ newton2 <-newton(log_ver, rep(0,15))
 newton3 <- newton(log_ver, summMCO)
 ```
 
-```{r, echo=FALSE}
-xtable(cbind(pars_ctrl, as.numeric(newton2$x_max), as.numeric(newton3$x_max)), 
-       digits = 9,
-       caption = "Comparación de las estimaciones de glm() y el método de newton")
+
+
+```{r, echo = FALSE}
+
+pi_gorro2 = as.numeric(1/(1+exp(-as.matrix(X)%*%newton2$x_max)))
+w_gorro2 <- as.matrix(diag(pi_gorro2*(1-pi_gorro2), nrow = length(pi_gorro2*(1-pi_gorro2))))
+var_gorro2 <- t(as.matrix(X))%*%w_gorro2%*%as.matrix(X)
+
+e_rel_newton2 <- abs(pars_ctrl - newton2$x_max)/abs(pars_ctrl) 
+
+
+pi_gorro3 = as.numeric(1/(1+exp(-as.matrix(X)%*%newton3$x_max)))
+w_gorro3 <- as.matrix(diag(pi_gorro3*(1-pi_gorro3), nrow = length(pi_gorro3*(1-pi_gorro3))))
+var_gorro3 <- t(as.matrix(X))%*%w_gorro3%*%as.matrix(X)
+
+e_rel_newton3 <- abs(pars_ctrl - newton3$x_max)/abs(pars_ctrl)
+
+
+
+xtable(as.data.frame(cbind(e_rel_newton2,diag(var_gorro2), e_rel_newton3,diag(var_gorro3))), 
+       digits = 4,
+       caption = "Error relativo respecto a glm() y varianza de Newton")
+
 ```
 
 \begin{table}[H]
 \centering
-\begin{tabular}{rrrr}
+\begin{tabular}{rrrrr}
   \hline
- Variable & glm() & Newton (Vector de 0's) & Newton (Vector de $\hat{\beta}_{MCO}$) \\ 
+ Variable & Error rel. $\hat{\beta_{0's}}$ & $\hat{Var(\hat{\beta}_{0's})}$ & Error rel. $\hat{\beta}_{MCO}$ & $\hat{Var(\hat{\beta}_{MCO})}$ \\ 
   \hline
-(Intercept) & -4.442367437 & -4.442363082 & -4.442361732 \\ 
-  female & -1.194755469 & -1.194755231 & -1.194755497 \\ 
-  educ & 0.277912495 & 0.277912242 & 0.277912116 \\ 
-  exper & 0.007568890 & 0.007568853 & 0.007568843 \\ 
-  tenure & 0.083587709 & 0.083587710 & 0.083587707 \\ 
-  northcen & -0.012727340 & -0.012727760 & -0.012727487 \\ 
-  south & 0.035935951 & 0.035935444 & 0.035935708 \\ 
-  west & 0.688820844 & 0.688820173 & 0.688820410 \\ 
-  reg.metro & 0.745975971 & 0.745975951 & 0.745975895 \\ 
-  construc & -0.363769611 & -0.363771043 & -0.363770666 \\ 
-  services & -0.493415175 & -0.493415066 & -0.493415144 \\ 
-  trade & -1.429567604 & -1.429567877 & -1.429567922 \\ 
-  profocc & 0.854540015 & 0.854540092 & 0.854540730 \\ 
-  clerocc & -0.585495085 & -0.585495421 & -0.585494736 \\ 
-  servocc & -1.209387935 & -1.209388297 & -1.209387806 \\ 
+  Intercept & 0.0000 & 75.1231 & 0.0000 & 75.1231 \\ 
+  female & 0.0000 & 31.4700 & 0.0000 & 31.4700 \\ 
+  educ & 0.0000 & 12750.9387 & 0.0000 & 12750.9390 \\ 
+  exper & 0.0000 & 35406.3138 & 0.0000 & 35406.3143 \\ 
+  tenure & 0.0000 & 5486.2684 & 0.0000 & 5486.2687 \\ 
+  northcen & 0.0000 & 18.6919 & 0.0000 & 18.6919 \\ 
+  south & 0.0000 & 26.7264 & 0.0000 & 26.7264 \\ 
+  west & 0.0000 & 13.5322 & 0.0000 & 13.5322 \\ 
+  reg.metro & 0.0000 & 56.5381 & 0.0000 & 56.5381 \\ 
+  construc & 0.0000 & 4.0744 & 0.0000 & 4.0744 \\ 
+  services & 0.0000 & 7.0713 & 0.0000 & 7.0713 \\ 
+  trade & 0.0000 & 18.6896 & 0.0000 & 18.6896 \\ 
+  profocc & 0.0000 & 30.5498 & 0.0000 & 30.5498 \\ 
+  clerocc & 0.0000 & 10.9593 & 0.0000 & 10.9593 \\ 
+  servocc & 0.0000 & 5.4530 & 0.0000 & 5.4530 \\ 
    \hline
 \end{tabular}
-\caption{Comparación de las estimaciones de glm() y el método de newton} 
+\caption{Error relativo respecto a glm() y varianza de Newton} 
 \end{table}
 
-Podemos ver que este método convergió rápidamente, en tan solo cuatro iteraciones en el caso del vector de ceros y en siete usando las estimaciones MCO, necesitando hacer _forward-tracking_ solo una vez en ambos casos. En este caso el vector nulo parece ser una buena opción de punto de arranque si no se cuenta con información sobre los coeficientes a estimar, incluso mejor que utilizar las estimaciones MCO ya que nos ahorramos iteraciones.
+
+Podemos ver que este método convergió rápidamente, en tan solo cuatro iteraciones en el caso del vector de ceros y en siete usando las estimaciones MCO, necesitando hacer _forward-tracking_ solo una vez en ambos casos. Nuevamente, los errores relativos resultan pequeños y las varianzas de las estimaciones similares a las obtenidas con el método del ascenso más rápido, dada la similitud de los coeficientes. En este caso el vector nulo parece ser una buena opción de punto de arranque si no se cuenta con información sobre los coeficientes a estimar, incluso mejor que utilizar las estimaciones MCO ya que nos ahorramos iteraciones.
 
 ### Método de Broyden-Fletcher-Goldfarg-Shanno (BFGS)
 
@@ -776,13 +801,10 @@ bfgs<-function(FUN,x0,tol=1e-5,maxiter=1000,mostrar=TRUE,a_max=1,tau=0.5,maxiter
 }
 ```
 
-- Al ahorrarse la evaluación de la hessiana, estos métodos pueden resultar más veloces que el de Newton, aunque esto también dependerá del vector inicial empleado. 
+Este método está comprendido dentro de la categoría de los de Cuasi-Newton. En vez de requerir la evaluación de la hessiana de la función a maximizar, en estos métodos se la aproxima utilizando la información de los cambios en el gradiente. Al ahorrarse la evaluación de la hessiana, estos métodos pueden resultar más veloces que el de Newton, aunque esto también dependerá del vector inicial empleado; el de Newton tenderá a tomar menos iteraciones si se comienza cerca de la solución. De todas maneras resulta necesario una evaluación inicial de la hessiana, que se puede elegir como el opuesto de la matriz identidad cuya dimensión es la cantidad de variables de la función a optimizar, o emplear una estimaciones de la hessiana en x 0 . Los distintos métodos de Cuasi-Newton se diferencian en la manera en que se aproxima y actualiza la hessiana, en particular el BFGS no implica la inversión de la aproximación actualizada, sino actualizar la inversa como se explicó
+anteriormente.
 
-- El método de Newton tenderá a tomar menos iteraciones si se comienza cerca de la solución. 
-
-- Resulta necesario una evaluación inicial de la hessiana, que se puede elegir como el opuesto de la matriz identidad cuya dimensión es la cantidad de variables de la función a optimizar, o emplear una estimaciones de la hessiana en $x_0$. 
-
-Nuevamente comenzamos tomando como vector inicial el de las estimaciones de la función _glm()_, obteniéndose un resultado análogo a los casos anteriores. Se quiso también hacer una comparación con el resultado obtenido con el algoritmo bfgs de la función _optim()_ de la biblioteca _stats_,  pero tuvo problemas al aproximar la hessiana. Continuamos presentando las estimaciones resultantes de utilizar como vector inicial el nulo y el de las estimaciones MCO. 
+Nuevamente comenzamos tomando como vector inicial el de las estimaciones de la función _glm()_, obteniéndose un resultado análogo a los casos anteriores. Se quiso también hacer una comparación con el resultado obtenido con el algoritmo bfgs de la función _optim()_ de la biblioteca _stats_,  pero tuvo problemas al aproximar la hessiana. Continuamos presentando los errores relativos de las estimaciones por BFGS respecto a las de _glm()_ y sus varianzas estimadas. 
 
 ```{r}
 bfgs1 <- bfgs(FUN = log_ver,x0 = pars_ctrl)
@@ -803,37 +825,58 @@ bfgs2 <- bfgs(FUN = log_ver,x0 = rep(0,15))
 bfgs3 <- bfgs(FUN = log_ver,x0 = summMCO, maxiter_bt = 20)
 ```
 
-```{r}
-bfgstab <- xtable(cbind(pars_ctrl, as.numeric(bfgs2$x_max), as.numeric(bfgs3$x_max)), 
-            digits = 9,
-             caption = "Comparación de las estimaciones de glm() y el método BFGS")
+
+```{r, echo = FALSE}
+
+pi_gorro4 = as.numeric(1/(1+exp(-as.matrix(X)%*%bfgs2$x_max)))
+w_gorro4 <- as.matrix(diag(pi_gorro4*(1-pi_gorro4), nrow = length(pi_gorro4*(1-pi_gorro4))))
+var_gorro4 <- t(as.matrix(X))%*%w_gorro4%*%as.matrix(X)
+
+e_rel_bfgs2 <- abs(pars_ctrl - bfgs2$x_max)/abs(pars_ctrl) 
+
+
+pi_gorro5 = as.numeric(1/(1+exp(-as.matrix(X)%*%bfgs3$x_max)))
+w_gorro5 <- as.matrix(diag(pi_gorro5*(1-pi_gorro5), nrow = length(pi_gorro5*(1-pi_gorro5))))
+var_gorro5 <- t(as.matrix(X))%*%w_gorro5%*%as.matrix(X)
+
+e_rel_bfgs3 <- abs(pars_ctrl - bfgs3$x_max)/abs(pars_ctrl)
+
+
+
+xtable(as.data.frame(cbind(e_rel_bfgs2,diag(var_gorro4), e_rel_bfgs3,diag(var_gorro5))), 
+       digits = 4,
+       caption = "Error relativo respecto a glm() y varianza de BFGS")
+
 ```
 
 \begin{table}[H]
 \centering
-\begin{tabular}{rrrr}
+\begin{tabular}{rrrrr}
   \hline
- Variable & glm() & BFGS (vector de 0's) & BFGS ($\hat{\beta}_{MCO}$) \\ 
+ Variable & Error rel. $\hat{\beta_{0's}}$ & $\hat{Var(\hat{\beta}_{0's})}$ & Error rel. $\hat{\beta}_{MCO}$ & $\hat{Var(\hat{\beta}_{MCO})}$ \\ 
   \hline
-(Intercept) & -4.442367437 & -4.441287082 & -4.442571372 \\ 
-  female & -1.194755469 & -1.194356801 & -1.194609027 \\ 
-  educ & 0.277912495 & 0.277846624 & 0.277942647 \\ 
-  exper & 0.007568890 & 0.007565239 & 0.007576988 \\ 
-  tenure & 0.083587709 & 0.083585123 & 0.083582161 \\ 
-  northcen & -0.012727340 & -0.012964024 & -0.012858416 \\ 
-  south & 0.035935951 & 0.035914771 & 0.035839134 \\ 
-  west & 0.688820844 & 0.688620025 & 0.688680786 \\ 
-  reg.metro & 0.745975971 & 0.745850209 & 0.745871069 \\ 
-  construc & -0.363769611 & -0.363854741 & -0.363864731 \\ 
-  services & -0.493415175 & -0.493346501 & -0.493359194 \\ 
-  trade & -1.429567604 & -1.429542202 & -1.429527372 \\ 
-  profocc & 0.854540015 & 0.854472462 & 0.854280808 \\ 
-  clerocc & -0.585495085 & -0.585483998 & -0.585675743 \\ 
-  servocc & -1.209387935 & -1.209298455 & -1.209619458 \\ 
+  Intercept & 0.0002 & 75.1316 & 0.0000 & 75.1251 \\ 
+  female & 0.0003 & 31.4754 & 0.0001 & 31.4713 \\ 
+  educ & 0.0002 & 12752.2602 & 0.0001 & 12751.2359 \\ 
+  exper & 0.0005 & 35410.4929 & 0.0011 & 35408.1030 \\ 
+  tenure & 0.0000 & 5486.7247 & 0.0001 & 5486.3052 \\ 
+  northcen & 0.0186 & 18.6936 & 0.0103 & 18.6924 \\ 
+  south & 0.0006 & 26.7300 & 0.0027 & 26.7272 \\ 
+  west & 0.0003 & 13.5337 & 0.0002 & 13.5325 \\ 
+  reg.metro & 0.0002 & 56.5438 & 0.0001 & 56.5389 \\ 
+  construc & 0.0002 & 4.0747 & 0.0003 & 4.0744 \\ 
+  services & 0.0001 & 7.0725 & 0.0001 & 7.0717 \\ 
+  trade & 0.0000 & 18.6913 & 0.0000 & 18.6901 \\ 
+  profocc & 0.0001 & 30.5522 & 0.0003 & 30.5501 \\ 
+  clerocc & 0.0000 & 10.9613 & 0.0003 & 10.9596 \\ 
+  servocc & 0.0001 & 5.4543 & 0.0002 & 5.4530 \\ 
    \hline
 \end{tabular}
-\caption{Comparación de las estimaciones de glm() y el método BFGS} 
+\caption{Error relativo respecto a glm() y varianza de BFGS} 
 \end{table}
+
+
+
 
 Si bien se llega al mismo máximo que en el método anterior, el desempeño de este método resultó peor que el de Newton en cuanto a la cantidad de iteraciones que toma para converger y la precisión de las estimaciones respecto a _glm()_. En cuanto a lo primero, se puede deber a que se partió de un vector lo suficientemente similar al que maximiza la log-verosimilitud para que el método de Newton fuera más veloz que el BFGS. Lo segundo puede ser consecuencia de que al aproximarse y no evaluarse la hessiana se pierde precisión, esto se puede solucionar reduciendo la tolerancia, aunque la consecuencia de esto es un aumento en las iteraciones necesarias para la convergencia.  
 
@@ -859,10 +902,10 @@ resumen_fin <- tibble(
  & Método & Iteraciones & f(x\_max) & Precisión respecto a glm() \\ 
   \hline
 1 & Ascenso más rápido & No converge & No converge & No converge \\ 
-  2 & Newton (vector 0's) & 4 & -232.344056522223 & 5 cifras desp. coma \\ 
-  3 & Newton (beta\_mco) & 7 & -232.34405652223 & 5 cifras desp. coma \\ 
-  4 & BFGS (vector 0's) & 35 & -232.344059820262 & 2 cifras desp. coma \\ 
-  5 & BFGS (beta\_mco) & 24 & -232.344057462874 & 2 cifras desp. coma \\ 
+  2 & Newton (vector 0's) & 4 & -232.34405& 5 cifras desp. coma \\ 
+  3 & Newton (beta\_mco) & 7 & -232.34405 & 5 cifras desp. coma \\ 
+  4 & BFGS (vector 0's) & 35 & -232.34405 & 2 cifras desp. coma \\ 
+  5 & BFGS (beta\_mco) & 24 & -232.34405 & 2 cifras desp. coma \\ 
    \hline
 \end{tabular}
 \caption{Resumen de resultados de los distintos métodos.} 
@@ -1253,17 +1296,21 @@ ascenso <- function(FUN,x0,tol=1e-5,maxiter=1000,mostrar=TRUE,
 }
 ```
 
-## Estimación tomando como base el vector de estimaciones MCO
+## Estimación tomando como base el vector de estimaciones de glm()
 
 ```{r, echo = TRUE, eval = FALSE}
 pars_ctrl <- c(summary(modelo_ctrl)$coefficients[,1])
-
 asce1 <- ascenso(FUN = log_ver, x0 = pars_ctrl)
 
+pi_gorro1 = as.numeric(1/(1+exp(-as.matrix(X)%*%asce1$x_max)))
+w_gorro1 <- as.matrix(diag(pi_gorro1*(1-pi_gorro1), nrow = length(pi_gorro1*(1-pi_gorro1))))
+var_gorro1 <- t(as.matrix(X))%*%w_gorro1%*%as.matrix(X)
 
-xtable(cbind(pars_ctrl, as.numeric(asce1$x_max)), 
-       digits = 9,
-       caption = "Comparación de las estimaciones de glm() y el método del ascenso más rápido")
+e_rel_asce <- abs(pars_ctrl - asce1$x_max)/abs(pars_ctrl) 
+
+xtable(as.data.frame(cbind(e_rel_asce,diag(var_gorro1))), 
+       digits = 4,
+       caption = "Error relativo respecto a glm() y varianza de ascenso más rápido")
 
 #max(pars_ctrl- as.numeric(asce1$x_max))
 ```
@@ -1363,21 +1410,29 @@ chequeo<-function(M){
 
 ## Aplicación del Método de Newton
 
-```{r, echo = TRUE, eval =FALSE}
-check1 <- chequeo(hessiana(log_ver, pars_ctrl))
+```{r, echo = TRUE, eval=FALSE}
 
-newton1 <-newton(log_ver, pars_ctrl)
+pi_gorro2 = as.numeric(1/(1+exp(-as.matrix(X)%*%newton2$x_max)))
+w_gorro2 <- as.matrix(diag(pi_gorro2*(1-pi_gorro2), nrow = length(pi_gorro2*(1-pi_gorro2))))
+var_gorro2 <- t(as.matrix(X))%*%w_gorro2%*%as.matrix(X)
 
-check2 <- chequeo(hessiana(log_ver, rep(0,15)))
-check3 <- chequeo(hessiana(log_ver, summMCO))
+e_rel_newton2 <- abs(pars_ctrl - newton2$x_max)/abs(pars_ctrl) 
 
-newton2 <-newton(log_ver, rep(0,15))
 
-newton3 <- newton(log_ver, summMCO)
+pi_gorro3 = as.numeric(1/(1+exp(-as.matrix(X)%*%newton3$x_max)))
+w_gorro3 <- as.matrix(diag(pi_gorro3*(1-pi_gorro3), nrow = length(pi_gorro3*(1-pi_gorro3))))
+var_gorro3 <- t(as.matrix(X))%*%w_gorro3%*%as.matrix(X)
 
-xtable(cbind(pars_ctrl, as.numeric(newton2$x_max), as.numeric(newton3$x_max)), 
-       digits = 9,
-       caption = "Comparación de las estimaciones de glm() y el método de newton")
+e_rel_newton3 <- abs(pars_ctrl - newton3$x_max)/abs(pars_ctrl)
+
+
+
+xtable(as.data.frame(
+    cbind(e_rel_newton2,diag(var_gorro2), e_rel_newton3,diag(var_gorro3))), 
+       digits = 4,
+       caption = "Error relativo respecto a glm() y varianza de Newton"
+    )
+
 ```
 
 ## Método BFGS
@@ -1442,10 +1497,38 @@ bfgs2 <- bfgs(FUN = log_ver,x0 = rep(0,15))
 
 bfgs3 <- bfgs(FUN = log_ver,x0 = summMCO, maxiter_bt = 20)
 
-bfgstab <- xtable(cbind(pars_ctrl, as.numeric(bfgs2$x_max), as.numeric(bfgs3$x_max)), 
-            digits = 9,
-             caption = "Comparación de las estimaciones de glm() y el método BFGS")
+pi_gorro4 = as.numeric(1/(1+exp(-as.matrix(X)%*%bfgs2$x_max)))
+w_gorro4 <- as.matrix(
+  diag(pi_gorro4*(1-pi_gorro4), 
+       nrow = length(pi_gorro4*(1-pi_gorro4)))
+  )
+var_gorro4 <- t(as.matrix(X))%*%w_gorro4%*%as.matrix(X)
+
+e_rel_bfgs2 <- abs(pars_ctrl - bfgs2$x_max)/abs(pars_ctrl) 
+
+
+pi_gorro5 = as.numeric(1/(1+exp(-as.matrix(X)%*%bfgs3$x_max)))
+w_gorro5 <- as.matrix(
+  diag(pi_gorro5*(1-pi_gorro5), 
+       nrow = length(pi_gorro5*(1-pi_gorro5)))
+  )
+var_gorro5 <- t(as.matrix(X))%*%w_gorro5%*%as.matrix(X)
+
+e_rel_bfgs3 <- abs(pars_ctrl - bfgs3$x_max)/abs(pars_ctrl)
+
+
+
+xtable(as.data.frame(
+  cbind(
+    e_rel_bfgs2,
+    diag(var_gorro4), 
+    e_rel_bfgs3,diag(var_gorro5))
+  ), 
+       digits = 4,
+       caption = "Error relativo respecto a glm() y varianza de BFGS"
+  )
 ```
+
 
 ## Resumen de resultados
 
