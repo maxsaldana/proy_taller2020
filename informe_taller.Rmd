@@ -88,7 +88,7 @@ $$+ \beta_{11}trade_i + \beta_{12}profocc_i + \beta_{13}clerocc_i + \beta_{14}se
 
 La función de unión (la que vincula $E(y_i)$ con $x'_i$) es:
 
-$$log_e \left[\frac{\pi_i}{1-\pi_i}\right] = exp(x'_i\beta) $$
+$$log_e \left[\frac{\pi_i}{1-\pi_i}\right] = x'_i\beta $$
 
 El problema de estimar el vector de parámetros $\beta$ se traduce en un problema de optimización, ya que buscamos que dicho vector sea el que maximice la función de verosimilitud de $Y$. Como $Y_i$ son variables aleatorias Bernoulli independientes e idénticamente distribuidas $\forall \,\, i=1,\dots,n$ la función de verosimilitud es:
 
@@ -776,23 +776,27 @@ bfgs<-function(FUN,x0,tol=1e-5,maxiter=1000,mostrar=TRUE,a_max=1,tau=0.5,maxiter
 }
 ```
 
-Este método está comprendido dentro de la categoría de los de Cuasi-Newton. En vez de requerir la evaluación de la hessiana de la función a maximizar, en estos métodos se la aproxima utilizando la información de lo cambios en el gradiente. Al ahorrarse la evaluación de la hessiana, estos métodos pueden resultar más veloces que el de Newton, aunque esto también dependerá del vector inicial empleado; el de Newton tenderá a tomar menos iteraciones si se comienza cerca de la solución. De todas maneras resulta necesario una evaluación inicial de la hessiana, que se puede elegir como el opuesto de la matriz identidad cuya dimensión es la cantidad de variables de la función a optimizar, o emplear una estimaciones de la hessiana en $x_0$. Los distintos métodos de Cuasi-Newton se diferencian en la manera en que se aproxima y actualiza la hessiana, en particular el BFGS no implica la inversión de la aproximación actualizada, sino actualizar la inversa como se explicó anteriormente.
+- Al ahorrarse la evaluación de la hessiana, estos métodos pueden resultar más veloces que el de Newton, aunque esto también dependerá del vector inicial empleado. 
+
+- El método de Newton tenderá a tomar menos iteraciones si se comienza cerca de la solución. 
+
+- Resulta necesario una evaluación inicial de la hessiana, que se puede elegir como el opuesto de la matriz identidad cuya dimensión es la cantidad de variables de la función a optimizar, o emplear una estimaciones de la hessiana en $x_0$. 
 
 Nuevamente comenzamos tomando como vector inicial el de las estimaciones de la función _glm()_, obteniéndose un resultado análogo a los casos anteriores. Se quiso también hacer una comparación con el resultado obtenido con el algoritmo bfgs de la función _optim()_ de la biblioteca _stats_,  pero tuvo problemas al aproximar la hessiana. Continuamos presentando las estimaciones resultantes de utilizar como vector inicial el nulo y el de las estimaciones MCO. 
 
 ```{r}
 bfgs1 <- bfgs(FUN = log_ver,x0 = pars_ctrl)
 
-# log_ver_op <- function(b){
-#   #b tiene que ser un vector k+1 = 14 + 1 dimensional
-#   
-#   lv <- -sum((as.numeric(datos$sal_med))*(as.matrix(X)%*%b)) - sum(log(1+exp(as.matrix(X)%*%b))) 
-#   
-#   return(lv)
-# }
-
-# optim no puede encontrar el maximo
-# bfgsr <- optim(par = rep(0,15), fn = log_ver_op, method = "BFGS", control = list(trace = TRUE))
+ # log_ver_op <- function(b){
+ #   #b tiene que ser un vector k+1 = 14 + 1 dimensional
+ # 
+ #   lv <- -sum((as.numeric(datos$sal_med))*(as.matrix(X)%*%b)) - sum(log(1+exp(as.matrix(X)%*%b)))
+ # 
+ #   return(lv)
+ # }
+ # 
+ # # optim no puede encontrar el maximo
+ # bfgsr <- optim(par = rep(0,15), fn = log_ver_op, method = "BFGS", control = list(trace = TRUE))
 
 bfgs2 <- bfgs(FUN = log_ver,x0 = rep(0,15))
 
